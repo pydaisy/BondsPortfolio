@@ -320,42 +320,44 @@ if bond_names_input:
 
             with col3:
                 st.markdown("### Kalkulator rentowności obligacji")
-                num_bonds = st.number_input(
-                    f"Liczba obligacji do zakupu:",
-                    min_value = 1, value = 1, step = 1, key = f"num_{bond.nazwa}"
-                )
-                cena_nabycia = st.number_input(
-                    f"Cena zakupu za obligację:",
-                    min_value = 0.0, value = 100.0, step = 0.01, key = f"price_{bond.nazwa}"
-                )
+                col31, col32 = st.columns([1,1])
+                with col31:
+                    num_bonds = st.number_input(
+                        f"Liczba obligacji do zakupu:",
+                        min_value = 1, value = 1, step = 1, key = f"num_{bond.nazwa}"
+                    )
+                    cena_nabycia = st.number_input(
+                        f"Cena zakupu za obligację:",
+                        min_value = 0.0, value = 100.0, step = 0.01, key = f"price_{bond.nazwa}"
+                    )
 
             # Kolumna 4: Wyliczenia
-            with col4:
-                total_investment = num_bonds * cena_nabycia
-                bond_ytm_brutto = bond.ytm_brutto(cena_nabycia)
-                bond_ytm_netto = bond.ytm_netto(cena_nabycia)
-                bond_ekwivalent_ytm_brutto = bond.ekwivalent_ytm_brutto(cena_nabycia)
-                bond_duration_macaulay = bond.macaulay_duration(cena_nabycia)
-                bond_duration_modified = bond.modified_duration(cena_nabycia)
+                with col32:
+                    total_investment = num_bonds * cena_nabycia
+                    bond_ytm_brutto = bond.ytm_brutto(cena_nabycia)
+                    bond_ytm_netto = bond.ytm_netto(cena_nabycia)
+                    bond_ekwivalent_ytm_brutto = bond.ekwivalent_ytm_brutto(cena_nabycia)
+                    bond_duration_macaulay = bond.macaulay_duration(cena_nabycia)
+                    bond_duration_modified = bond.modified_duration(cena_nabycia)
 
-                st.write(f"**YTM (Brutto):** {bond_ytm_brutto:.2f}%")
-                st.write(f"**YTM (Netto):** {bond_ytm_netto:.2f}%")
-                st.write(f"**Ekwiwalent YTM brutto:** {bond_ekwivalent_ytm_brutto:.2f}%")
-                st.write(f"**Macauleya Duration (lata):** {bond_duration_macaulay:.2f}")
-                st.write(f"**Duration zmodyfikowana (lata):** {bond_duration_modified:.2f}")
+                    st.write(f"**YTM (Brutto):** {bond_ytm_brutto:.2f}%")
+                    st.write(f"**YTM (Netto):** {bond_ytm_netto:.2f}%")
+                    st.write(f"**Ekwiwalent YTM brutto:** {bond_ekwivalent_ytm_brutto:.2f}%")
+                    st.write(f"**Macauleya Duration (lata):** {bond_duration_macaulay:.2f}")
+                    st.write(f"**Duration zmodyfikowana (lata):** {bond_duration_modified:.2f}")
 
-                # Dodanie obligacji do portfela
-                if st.button(f"Dodaj {bond.nazwa} do portfela", key = f"add_{bond.nazwa}"):
-                    myportfolio.add_bond(bond, num_bonds, cena_nabycia)
-                    # Zapisanie danych do pliku Excel
-                    add_to_portfolio_xlsx(
-                        'portfolio_obligacje.xlsx',
-                        bond.nazwa,
-                        bond.typ_dzialalnosci,
-                        cena_nabycia,
-                        num_bonds
-                    )
-                    st.success(f"Dodano {num_bonds} obligacji {bond.nazwa} do portfela.")
+                    # Dodanie obligacji do portfela
+                    if st.button(f"Dodaj {bond.nazwa} do portfela", key = f"add_{bond.nazwa}"):
+                        myportfolio.add_bond(bond, num_bonds, cena_nabycia)
+                        # Zapisanie danych do pliku Excel
+                        add_to_portfolio_xlsx(
+                            'portfolio_obligacje.xlsx',
+                            bond.nazwa,
+                            bond.typ_dzialalnosci,
+                            cena_nabycia,
+                            num_bonds
+                        )
+                        st.success(f"Dodano {num_bonds} obligacji {bond.nazwa} do portfela.")
 
             # Separator pomiędzy obligacjami
             st.divider()

@@ -93,11 +93,12 @@ class BondScraper:
         """Scrapes details for a specific bond."""
         base_url = "https://gpwcatalyst.pl/o-instrumentach-instrument?nazwa="
         url = base_url + bond_name
-        print(f"Accessing URL: {url}")
+        print(f"Przetwarzanie URL: {url}")
 
         # Ustawienia przeglądarki
         options = webdriver.ChromeOptions()
         options.add_argument("--no-sandbox")
+        options.add_argument("--headless")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--start-fullscreen")
 
@@ -108,7 +109,7 @@ class BondScraper:
             driver.get(url)
 
             # Kliknięcie zakładki "kalkulatorTab"
-            kalkulator_tab = WebDriverWait(driver, 20).until(
+            kalkulator_tab = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, ".kalkulatorTab a"))
             )
             kalkulator_tab.click()
@@ -122,7 +123,7 @@ class BondScraper:
             soup = BeautifulSoup(driver.page_source, "html.parser")
             table = soup.find("table", {"class": "notoria-profile"})
             if not table:
-                print(f"Table not found for {bond_name}")
+                print(f"Tabela nie została znaleziona: {bond_name}")
                 return None
 
             bond_details = {}
@@ -158,7 +159,7 @@ class BondScraper:
             return bond_details
 
         except Exception as e:
-            print(f"Error while processing {bond_name}: {e}")
+            print(f"Error podczas przetwarzania {bond_name}: {e}")
             return None
 
         finally:

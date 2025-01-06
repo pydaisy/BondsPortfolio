@@ -57,18 +57,7 @@ class Bond:
             maturity_date = datetime.strptime(self.maturity_date, '%Y-%m-%d').date()
         else:
             maturity_date = self.maturity_date
-            return (maturity_date - current_date).days / 366.0
-        return None
-
-
-# Klasa dla obligacji stałoprocentowych
-class FixedRateBond(Bond):
-    @log_execution
-    def calculate_coupon(self):
-        """Oblicza wartość kuponu dla obligacji stałoprocentowych."""
-        if self.nominal_value and self.current_interest and self.payments_per_year:
-            return (self.nominal_value * self.current_interest / 100) / self.payments_per_year
-        return None
+        return (maturity_date - current_date).days / 365.0
 
     @log_execution
     def generate_coupon_dates(self):
@@ -86,9 +75,21 @@ class FixedRateBond(Bond):
 
         for _ in range(total_payments):
             coupon_dates.append(current_date)
-            current_date -= relativedelta(months=int(12 / payments_per_year))
+            current_date -= relativedelta(months = int(12 / payments_per_year))
 
         return sorted(coupon_dates)
+
+
+# Klasa dla obligacji stałoprocentowych
+class FixedRateBond(Bond):
+    @log_execution
+    def calculate_coupon(self):
+        """Oblicza wartość kuponu dla obligacji stałoprocentowych."""
+        if self.nominal_value and self.current_interest and self.payments_per_year:
+            return (self.nominal_value * self.current_interest / 100) / self.payments_per_year
+        return None
+
+
 
     @log_execution
     def ytm_brutto(self, purchase_price, max_iterations = 100, tolerance = 1e-6):
@@ -390,4 +391,3 @@ class BondPortfolio:
                 self.add_bond(row['name'], row['quantity'], row['purchase_price'])
         except FileNotFoundError:
             st.warning("Portfolio file not found, starting with an empty portfolio.")
-
