@@ -5,7 +5,7 @@ import plotly.express as px
 from bond_scraper import BondScraper
 from bond_classes import Bond, BondPortfolio, FixedRateBond, FloatingRateBond
 from datetime import date, datetime
-from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from theme_settings import apply_theme, generate_color_palette
 
 # Inicjalizacja obiektu klasy BondScraper
@@ -97,7 +97,7 @@ def create_bond_instance(details):
     wolumen = bond_info.get('wolumen', 0)
     obrot = bond_info.get('obrot', 0)
 
-    reference_rate_dict = {"WIBOR3M": 6.5, "WIBOR6M": 6.8}
+    reference_rate_dict = {"WIBOR3M": 5.82, "WIBOR6M": 5.8}
     bond_class = interest_type_map.get(details.get("Interest Type"), Bond)
     model_of_forecast = details.get("Model of forecast")
     reference_rate_model = reference_rate_dict.get(model_of_forecast, None) if model_of_forecast else None
@@ -178,7 +178,7 @@ if 'bonds_df' not in st.session_state:
     st.session_state['bonds_df'] = pd.DataFrame()
     st.session_state['data_date'] = None
 
-# Wczytanie danych z pliku typ_spolek.csv i połączenie z bonds_df
+# Wczytanie danych z pliku corp_type.xlsx i połączenie z bonds_df
 try:
     typ_spolek_df = pd.read_excel('corp_type.xlsx')
     if not st.session_state['bonds_df'].empty:
@@ -239,6 +239,7 @@ if not st.session_state['bonds_df'].empty:
         bonds_df,
         gridOptions = grid_options,
         use_container_width = True,
+        update_mode = GridUpdateMode.MODEL_CHANGED,
         theme='balham',
         height = 500
     )
@@ -283,7 +284,7 @@ if bond_names_input:
             bond = create_bond_instance(bond_data)
 
             # Układ z czterema kolumnami
-            col1, col2, col3, col4 = st.columns([1, 1.3, 0.8, 1])
+            col1, col2, col3 = st.columns([1, 1.3, 1.8])
 
             # Kolumna 1: Szczegóły obligacji
             with col1:
@@ -326,12 +327,18 @@ if bond_names_input:
                         f"Liczba obligacji do zakupu:",
                         min_value = 1, value = 1, step = 1, key = f"num_{bond.nazwa}"
                     )
+
+                    # Sprawdź, czy kurs_ostatni jest liczbą
+                    if isinstance(bond.kurs_ostatni, (int, float)) and not isinstance(bond.kurs_ostatni, bool):
+                        domyslna_cena = bond.kurs_ostatni
+                    else:
+                        domyslna_cena = 100.0
+
                     cena_nabycia = st.number_input(
                         f"Cena zakupu za obligację:",
-                        min_value = 0.0, value = 100.0, step = 0.01, key = f"price_{bond.nazwa}"
+                        min_value = 0.0, value = domyslna_cena, step = 0.01, key = f"price_{bond.nazwa}"
                     )
 
-            # Kolumna 4: Wyliczenia
                 with col32:
                     total_investment = num_bonds * cena_nabycia
                     bond_ytm_brutto = bond.ytm_brutto(cena_nabycia)
@@ -343,13 +350,12 @@ if bond_names_input:
                     st.write(f"**YTM (Brutto):** {bond_ytm_brutto:.2f}%")
                     st.write(f"**YTM (Netto):** {bond_ytm_netto:.2f}%")
                     st.write(f"**Ekwiwalent YTM brutto:** {bond_ekwivalent_ytm_brutto:.2f}%")
-                    st.write(f"**Macauleya Duration (lata):** {bond_duration_macaulay:.2f}")
-                    st.write(f"**Duration zmodyfikowana (lata):** {bond_duration_modified:.2f}")
+                    st.write(f"**Czas trwania Macaulay'a (w latach):** {bond_duration_macaulay:.2f}")
+                    st.write(f"**Zmodyfikowany czas trwania (w latach):** {bond_duration_modified:.2f}")
 
                     # Dodanie obligacji do portfela
                     if st.button(f"Dodaj {bond.nazwa} do portfela", key = f"add_{bond.nazwa}"):
                         myportfolio.add_bond(bond, num_bonds, cena_nabycia)
-                        # Zapisanie danych do pliku Excel
                         add_to_portfolio_xlsx(
                             'portfolio_obligacje.xlsx',
                             bond.nazwa,
@@ -383,6 +389,12 @@ if len(myportfolio.bonds) > 0:
     bonds_df = pd.DataFrame(bonds_summary)
     st.table(bonds_df)
 
+    # Analiza wydajności obligacji
+    performance_data = myportfolio.bond_performance_analysis()
+    performance_df = pd.DataFrame(performance_data)
+    st.subheader("Analiza wydajności obligacji")
+    st.table(performance_df)
+
     # Tworzenie listy dla interest_type i model_of_forecast na podstawie liczby obligacji w portfelu
     data = []
     for bond in myportfolio.bonds:
@@ -402,22 +414,22 @@ if len(myportfolio.bonds) > 0:
     # Wykres sunburst
     fig_sunburst = px.sunburst(
         df,
-        path = ["interest_type", "model_of_forecast"],
-        title = "Struktura portfela według typu oprocentowania i modelu prognozy",
-        color = "interest_type",
+        path=["interest_type", "model_of_forecast"],
+        title="Struktura portfela według typu oprocentowania i modelu prognozy",
+        color="interest_type",
         color_discrete_sequence=color_palette,  # Użycie mapy kolorów
     )
 
     # Ustawienia czcionki i transparentne tło legendy
     fig_sunburst.update_layout(
-        title_font = dict(family = "Poppins", size = 18),  # Czcionka dla tytułów
+        title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
         font=dict(family="Poppins", size=14),  # Czcionka wykresów
         legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
     )
 
     fig_sunburst.update_traces(
-        hovertemplate = "<b>Oprocentowanie %{id}</b><br>Liczba obligacji:%{value}<br>Procentowy udział w portfelu: %{percentEntry}<br>",
-        hoverlabel = dict(font_size = 12, font_family = "Poppins")
+        hovertemplate="<b>Oprocentowanie %{id}</b><br>Liczba obligacji:%{value}<br>Procentowy udział w portfelu: %{percentEntry}<br>",
+        hoverlabel=dict(font_size=12, font_family="Poppins")
     )
 
     # Średnie oprocentowanie
@@ -430,10 +442,10 @@ if len(myportfolio.bonds) > 0:
 
     # Procentowy podział według typu działalności
     fig_activity = px.pie(
-        names = activity_counts.index,
-        values = activity_counts.values,
-        title = "Podział portfela według typu działalności",
-        hole = 0.5,
+        names=activity_counts.index,
+        values=activity_counts.values,
+        title="Podział portfela według typu działalności",
+        hole=0.5,
         color_discrete_sequence=color_palette  # Użycie mapy kolorów
     )
 
@@ -445,11 +457,62 @@ if len(myportfolio.bonds) > 0:
     )
 
     fig_activity.update_traces(
-        hovertemplate = "<b>%{label}</b><br>Liczba obligacji: %{value}</br>",
-        hoverlabel = dict(font_size = 12, font_family = "Poppins")
+        hovertemplate="<b>%{label}</b><br>Liczba obligacji: %{value}</br>",
+        hoverlabel=dict(font_size=12, font_family="Poppins")
     )
 
-    # Układ dwóch wykresów obok siebie
+    # Rozkład dat zapadalności
+    maturity_dates = [
+        bond.maturity_date for bond in myportfolio.bonds
+        for _ in range(myportfolio.get_total_bonds(bond))
+    ]  # Lista dat zapadalności uwzględniająca wolumen
+
+    # Konwersja na DataFrame i dodanie roku zapadalności
+    maturity_df = pd.DataFrame({
+        'Data zapadalności': pd.to_datetime(maturity_dates),
+    })
+    maturity_df['Rok zapadalności'] = maturity_df['Data zapadalności'].dt.year
+
+    # Analiza interwałów czasowych
+    current_year = pd.Timestamp.now().year
+    next_year = current_year + 1
+
+    maturity_intervals = {
+        'Bieżący rok': maturity_df[maturity_df['Rok zapadalności'] == current_year],
+        'Przyszły rok': maturity_df[maturity_df['Rok zapadalności'] == next_year],
+        'Za 2+ lata': maturity_df[maturity_df['Rok zapadalności'] > next_year],
+    }
+
+    # Wyświetlenie podsumowania liczby obligacji w przedziałach
+    st.subheader("Podział obligacji według okresów zapadalności")
+    for interval, data in maturity_intervals.items():
+        st.write(f"- **{interval}**: {len(data)} obligacji")
+
+    # Dynamiczny histogram z interwałami czasowymi
+    fig_maturity = px.histogram(
+        maturity_df,
+        x = 'Data zapadalności',
+        title = "Rozkład dat zapadalności obligacji",
+        labels = {'x': 'Data zapadalności', 'y': 'Liczba obligacji'},
+        color_discrete_sequence = color_palette,  # Użycie mapy kolorów
+        nbins = 20  # Liczba binów do podziału na przedziały
+    )
+
+    # Dostosowanie wykresu
+    fig_maturity.update_layout(
+        title_font = dict(family = "Poppins", size = 18),  # Czcionka dla tytułu
+        font = dict(family = "Poppins", size = 14),  # Czcionka wykresów
+        xaxis_title = "Data zapadalności",
+        yaxis_title = "Liczba obligacji",
+        legend = dict(bgcolor = "rgba(0,0,0,0)")  # Przezroczyste tło legendy
+    )
+
+    # Dodanie tekstu dla zakresów
+    fig_maturity.update_traces(
+        hovertemplate = "<b>Data zapadalności:</b> %{x|%Y-%m-%d}<br><b>Liczba obligacji:</b> %{y}"
+    )
+
+    # Wyświetlenie wykresów w układzie obok siebie
     col1, col2 = st.columns(2)
 
     with col1:
@@ -457,6 +520,8 @@ if len(myportfolio.bonds) > 0:
 
     with col2:
         st.plotly_chart(fig_activity)
+
+    st.plotly_chart(fig_maturity)
 
 else:
     st.warning("Twój portfel jest pusty. Dodaj obligacje, aby zobaczyć analizę.")

@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch, MagicMock
-import pandas as pd
 from bond_scraper import BondScraper
 
 class TestBondScraper(unittest.TestCase):

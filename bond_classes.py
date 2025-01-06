@@ -4,29 +4,36 @@ import streamlit as st
 from scipy.optimize import root_scalar
 from dateutil.relativedelta import relativedelta
 
+
 def log_execution(func):
     """Dekorator do logowania wywołań funkcji."""
+
     def wrapper(*args, **kwargs):
         print(f"Wywołanie funkcji: {func.__name__}")
         print(f"Argumenty pozycyjne: {args}")
         result = func(*args, **kwargs)
         print(f"Zwrócony wynik: {result}")
         return result
+
     return wrapper
+
 
 # Klasa bazowa Bond
 class Bond:
-    def __init__(self, nazwa, segment, kurs_otwarcia, kurs_ostatni, data_ostatniej_transakcji, kurs_min, kurs_max, najlepsza_oferta_kupna_limit,
-                 najlepsza_oferta_kupna_wolumen, najlepsza_oferta_sprzedazy_limit, najlepsza_oferta_sprzedazy_wolumen, zmiana, wolumen, obrot,
-                 nominal_value=None, maturity_date=None, interest_type=None, nominal_margin=None,
-                 current_interest=None, payments_per_year=None, accrued_interest=None, typ_dzialalnosci=None, model_of_forecast=None, reference_rate_model=None):
+    def __init__(self, nazwa, segment, kurs_otwarcia, kurs_ostatni, data_ostatniej_transakcji, kurs_min, kurs_max,
+                 najlepsza_oferta_kupna_limit,
+                 najlepsza_oferta_kupna_wolumen, najlepsza_oferta_sprzedazy_limit, najlepsza_oferta_sprzedazy_wolumen,
+                 zmiana, wolumen, obrot,
+                 nominal_value = None, maturity_date = None, interest_type = None, nominal_margin = None,
+                 current_interest = None, payments_per_year = None, accrued_interest = None, typ_dzialalnosci = None,
+                 model_of_forecast = None, reference_rate_model = None):
         self.nazwa = nazwa
         self.segment = segment
         self.kurs_otwarcia = kurs_otwarcia
-        self.kurs_ostatni = kurs_ostatni
+        self.kurs_ostatni = float(kurs_ostatni.replace(',', '.')) if kurs_ostatni != "-" else "-"
         self.data_ostatniej_transakcji = data_ostatniej_transakcji
-        self.kurs_min = kurs_min
-        self.kurs_max = kurs_max
+        self.kurs_min = kurs_min.replace(',', '.') if kurs_min != "-" else "-"
+        self.kurs_max = kurs_max.replace(',', '.') if kurs_max != "-" else "-"
         self.najlepsza_oferta_kupna_limit = najlepsza_oferta_kupna_limit
         self.najlepsza_oferta_kupna_wolumen = najlepsza_oferta_kupna_wolumen
         self.najlepsza_oferta_sprzedazy_limit = najlepsza_oferta_sprzedazy_limit
@@ -89,14 +96,12 @@ class FixedRateBond(Bond):
             return (self.nominal_value * self.current_interest / 100) / self.payments_per_year
         return None
 
-
-
     @log_execution
     def ytm_brutto(self, purchase_price, max_iterations = 100, tolerance = 1e-6):
         """Oblicza YTM dla obligacji stałoprocentowej."""
         from scipy.optimize import newton
 
-        purchase_price=purchase_price*self.nominal_value/100
+        purchase_price = purchase_price * self.nominal_value / 100
 
         coupon = self.calculate_coupon()  # Kupon dla jednego okresu
         if coupon is None:
@@ -110,7 +115,7 @@ class FixedRateBond(Bond):
         if not payments_per_year:
             raise ValueError("Nie zdefiniowano liczby płatności w ciągu roku.")
 
-        total_periods = int(round(years_to_maturity * payments_per_year)+1)  # Zaokrąglenie liczby okresów
+        total_periods = int(round(years_to_maturity * payments_per_year) + 1)  # Zaokrąglenie liczby okresów
 
         def price_difference(ytm):
             # Przeliczenie YTM na okresowe (ytm_per_period)
@@ -136,6 +141,8 @@ class FixedRateBond(Bond):
         """
         Oblicza YTM netto (po uwzględnieniu podatku) dla obligacji stałoprocentowej.
 
+        :param max_iterations:
+        :param tolerance:
         :param purchase_price: Cena zakupu obligacji.
         :param tax_rate: Stawka podatkowa (domyślnie 19%).
         :return: YTM netto w procentach.
@@ -258,8 +265,10 @@ class FixedRateBond(Bond):
         return modified_duration_years
 
     # Klasa dla obligacji zmiennoprocentowych
+
+
 class FloatingRateBond(Bond):
-    def __init__(self, *args, model_of_forecast=None, reference_rate_model=None, **kwargs):
+    def __init__(self, *args, model_of_forecast = None, reference_rate_model = None, **kwargs):
         super().__init__(*args, **kwargs)
         self.model_of_forecast = model_of_forecast
         self.reference_rate_model = reference_rate_model
@@ -279,13 +288,13 @@ class FloatingRateBond(Bond):
 
         payments_per_year = self.payments_per_year or 1  # Domyślnie 1 płatność rocznie
         periods = int(years_to_maturity * payments_per_year)
-        purchase_price=purchase_price*self.nominal_value/100
+        purchase_price = purchase_price * self.nominal_value / 100
 
         def price_difference(ytm):
             price = 0
-            for period in range(1, periods +1):
+            for period in range(1, periods + 1):
                 # Oblicz kupon dla danego okresu
-                reference_rate = self.reference_rate_model #.get_rate(period)
+                reference_rate = self.reference_rate_model  # .get_rate(period)
                 coupon = self.nominal_value * (reference_rate + self.nominal_margin) / 100 / payments_per_year
                 # Dyskontuj kupon
                 price += coupon / ((1 + ytm / payments_per_year) ** period)
@@ -294,31 +303,70 @@ class FloatingRateBond(Bond):
             return price - purchase_price
 
         # Znajdź YTM przy użyciu metody Brent'a
-        result = root_scalar(price_difference, bracket=[0.0001, 1], method='brentq')
+        result = root_scalar(price_difference, bracket = [0.000001, 1], method = 'brentq')
         if not result.converged:
             raise RuntimeError("Obliczenie YTM nie powiodło się.")
 
         return result.root * 100
 
     @log_execution
-    def ytm_netto(self, purchase_price):
+    def ytm_netto(self, purchase_price, tax_rate = 0.19):
         """Oblicza YTM brutto dla obligacji zmiennoprocentowych."""
-        return self.ytm_brutto(purchase_price)/(1-0.19)
+        years_to_maturity = self.years_to_maturity(date.today())
+        if not years_to_maturity or not self.reference_rate_model:
+            raise ValueError("Nie można obliczyć YTM dla obligacji zmiennoprocentowej.")
+
+        payments_per_year = self.payments_per_year or 1  # Domyślnie 1 płatność rocznie
+        periods = int(years_to_maturity * payments_per_year)
+        purchase_price = purchase_price * self.nominal_value / 100
+
+        def price_difference(ytm):
+            price = 0
+            for period in range(1, periods + 1):
+                # Oblicz kupon dla danego okresu
+                reference_rate = self.reference_rate_model  # .get_rate(period)
+                coupon = self.nominal_value * (reference_rate + self.nominal_margin) / 100 / payments_per_year
+                coupon = coupon * (1 - tax_rate)
+                # Dyskontuj kupon
+                price += coupon / ((1 + ytm / payments_per_year) ** period)
+            # Dyskontuj wartość nominalną
+            price += self.nominal_value / ((1 + ytm / payments_per_year) ** periods)
+            return price - purchase_price
+
+        # Znajdź YTM przy użyciu metody Brent'a
+        result = root_scalar(price_difference, bracket = [0.0001, 1], method = 'brentq')
+        if not result.converged:
+            raise RuntimeError("Obliczenie YTM nie powiodło się.")
+
+        return result.root * 100
 
     @log_execution
-    def ekwivalent_ytm_brutto(self, purchase_price):
-        """Oblicza YTM brutto dla obligacji zmiennoprocentowych."""
-        return self.ytm_brutto(purchase_price)/(1-0.19)*0.19
+    def ekwivalent_ytm_brutto(self, purchase_price, tax_rate = 0.19):
+        """
+        Oblicza ekwiwalent rentowności do wykupu brutto (GEY) na podstawie ceny zakupu obligacji.
+
+        :param purchase_price: Cena zakupu obligacji.
+        :param tax_rate: Stawka podatkowa (domyślnie 19%).
+        :return: Ekwiwalent YTM brutto w procentach.
+        """
+        if tax_rate >= 1 or tax_rate < 0:
+            raise ValueError("Stawka podatkowa musi być w zakresie od 0 do 1.")
+
+        # Oblicz YTM netto
+        ytm_netto = self.ytm_netto(purchase_price, tax_rate)
+
+        # Oblicz ekwiwalent YTM brutto
+        return ytm_netto / (1 - tax_rate)
 
     @log_execution
     def macaulay_duration(self, purchase_price):
         """Oblicza YTM brutto dla obligacji zmiennoprocentowych."""
-        return self.ytm_brutto(purchase_price)/(1-0.19)*0.19
+        return self.ytm_brutto(purchase_price) / (1 - 0.19) * 0.19
 
     @log_execution
     def modified_duration(self, purchase_price):
         """Oblicza YTM brutto dla obligacji zmiennoprocentowych."""
-        return self.ytm_brutto(purchase_price)/(1-0.19)*0.19
+        return self.ytm_brutto(purchase_price) / (1 - 0.19) * 0.19
 
 
 # Klasa BondPortfolio
@@ -347,12 +395,12 @@ class BondPortfolio:
 
     @log_execution
     def total_value(self):
-        """Oblicz całkowitą wartość portfela."""
+        """Oblicza całkowitą wartość portfela."""
         return sum(bond.nominal_value * quantity for bond, quantity in self.bonds.items())
 
     @log_execution
     def average_interest_rate(self):
-        """Oblicz średnie oprocentowanie portfela, biorąc pod uwagę nominalne oprocentowanie obligacji."""
+        """Oblicz średnie bieżące oprocentowanie portfela, biorąc pod uwagę nominalne oprocentowanie obligacji."""
         total_value = 0
         weighted_rate = 0
         for bond, quantity_data in self.bonds.items():
@@ -378,9 +426,27 @@ class BondPortfolio:
                     "Total Purchase Value": total_purchase_value,  # Całkowita wartość nabycia
                     "Interest Type": bond.interest_type,  # Typ oprocentowania
                     "Model of Forecast": bond.model_of_forecast if bond.interest_type == "zmienne" else "-",
-                    # Model prognozy
+                    # Model prognozy, np. WIBOR6M
                 })
         return summary
+
+    @log_execution
+    def bond_performance_analysis(self):
+        """Analizuje wydajność obligacji w porównaniu do ich cen zakupu."""
+        performance_data = []
+        for bond, transactions in self.bonds.items():
+            for quantity, purchase_price in transactions:
+                current_value = bond.nominal_value * quantity
+                purchase_value = purchase_price * quantity
+                roi = ((current_value - purchase_value) / purchase_value) * 100
+                performance_data.append({
+                    "Name": bond.nazwa,
+                    "Quantity": quantity,
+                    "Purchase Value": purchase_value,
+                    "Current Value": current_value,
+                    "ROI (%)": roi
+                })
+        return performance_data
 
     @log_execution
     def load_from_xlsx(self, file_name):
@@ -390,4 +456,4 @@ class BondPortfolio:
             for index, row in df.iterrows():
                 self.add_bond(row['name'], row['quantity'], row['purchase_price'])
         except FileNotFoundError:
-            st.warning("Portfolio file not found, starting with an empty portfolio.")
+            st.warning("Plik z portfelem obligacji nie został znaleziony. Portfolio jest zatem puste.")

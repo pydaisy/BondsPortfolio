@@ -388,13 +388,6 @@ def apply_theme(dark_mode=False, theme_file = "data/material-theme.json"):
 
         }}
 
-        /* Errory i powiadomienia */ 
-        div[role="alert"] > div {{
-                background-color: {selected_theme['onErrorContainer']} !important;
-                color: {selected_theme['errorContainer']} !important;
-        }}
-
-
 
         /* Styl wykresów Plotly - transparentne tło */
         .main-svg {{
@@ -421,6 +414,17 @@ def apply_theme(dark_mode=False, theme_file = "data/material-theme.json"):
             transition: all 0.3s ease-in-out; /* Płynne przejście */
             border-radius: 10px; /* Zaokrąglenie rogów */
             cursor: pointer; /* Zmiana kursora */
+        }}
+        
+        /* Errory i powiadomienia */ 
+        div[role="alert"] {{
+                background-color: transparent !important;
+                color: {selected_theme['onErrorContainer']} !important;
+        }}
+        
+        div[data-testid="stAlertContainer"] {{
+                background-color: transparent !important;
+                color: {selected_theme['onErrorContainer']} !important;
         }}
 
         </style>

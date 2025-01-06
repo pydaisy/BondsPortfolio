@@ -10,7 +10,11 @@ from bs4 import BeautifulSoup
 from webdriver_manager.chrome import ChromeDriverManager
 
 def measure_time(func):
-    """Dekorator do mierzenia czasu wykonania funkcji."""
+    """
+    Dekorator do mierzenia czasu wykonania funkcji.
+
+    Funkcja wyświetla czas, jaki zajęło wykonanie oznaczonej nią metody lub funkcji.
+    """
     def wrapper(*args, **kwargs):
         start_time = time.time()
         result = func(*args, **kwargs)
@@ -21,12 +25,27 @@ def measure_time(func):
 
 
 class BondScraper:
+    """
+    Klasa BondScraper odpowiada za scrapowanie danych o obligacjach z podanej strony internetowej.
+
+    Główne funkcjonalności:
+    - Pobieranie tabeli z danymi o obligacjach.
+    - Zbieranie szczegółowych danych dla konkretnej obligacji.
+    """
     def __init__(self, url="https://gpwcatalyst.pl/notowania-obligacji-obligacje-korporacyjne"):
         self.url = url  # Domyślny URL
 
     @measure_time
     def fetch_bonds(self):
-        """Scrapes general bond data from the given URL and processes the table."""
+        """
+        Pobiera dane ogólne o obligacjach z podanej strony internetowej.
+
+        Metoda wykorzystuje bibliotekę BeautifulSoup do przetwarzania HTML, wyszukuje tabelę
+        z danymi o obligacjach i przekształca ją w DataFrame.
+
+        Zwraca:
+        - DataFrame zawierający przetworzone dane o obligacjach.
+        """
         response = requests.get(self.url)
         soup = BeautifulSoup(response.text, 'html.parser')
         table = soup.find('table', {'id': 'tab-1000'})
@@ -90,7 +109,18 @@ class BondScraper:
 
     @measure_time
     def scrape_details(self, bond_name):
-        """Scrapes details for a specific bond."""
+        """
+        Pobiera szczegółowe dane o wybranej obligacji.
+
+        Argumenty:
+        - bond_name: str - nazwa obligacji.
+
+        Metoda otwiera stronę szczegółową obligacji za pomocą przeglądarki Selenium,
+        a następnie pobiera dane o oprocentowaniu, marży i innych szczegółach.
+
+        Zwraca:
+        - dict: szczegółowe dane o obligacji.
+        """
         base_url = "https://gpwcatalyst.pl/o-instrumentach-instrument?nazwa="
         url = base_url + bond_name
         print(f"Przetwarzanie URL: {url}")
@@ -98,7 +128,6 @@ class BondScraper:
         # Ustawienia przeglądarki
         options = webdriver.ChromeOptions()
         options.add_argument("--no-sandbox")
-        options.add_argument("--headless")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--start-fullscreen")
 
