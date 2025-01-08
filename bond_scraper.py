@@ -184,6 +184,8 @@ class BondScraper:
                         bond_details["Accrued interest"] = value
                     elif "Liczba wypłat w ciągu roku" in key:
                         bond_details["Payments per year"] = value
+                   # elif "Data następnej płatności odsetek" in key:
+                    #    bond_details["Date of next coupon"] = value
 
             return bond_details
 

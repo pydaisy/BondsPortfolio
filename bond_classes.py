@@ -20,20 +20,22 @@ def log_execution(func):
 
 # Klasa bazowa Bond
 class Bond:
-    def __init__(self, nazwa, segment, kurs_otwarcia, kurs_ostatni, data_ostatniej_transakcji, kurs_min, kurs_max,
+    def __init__(self, emitent, nazwa, segment, kurs_otwarcia, kurs_odniesienia, kurs_ostatni, data_ostatniej_transakcji, kurs_min, kurs_max,
                  najlepsza_oferta_kupna_limit,
                  najlepsza_oferta_kupna_wolumen, najlepsza_oferta_sprzedazy_limit, najlepsza_oferta_sprzedazy_wolumen,
                  zmiana, wolumen, obrot,
                  nominal_value = None, maturity_date = None, interest_type = None, nominal_margin = None,
                  current_interest = None, payments_per_year = None, accrued_interest = None, typ_dzialalnosci = None,
                  model_of_forecast = None, reference_rate_model = None):
+        self.emitent = emitent
         self.nazwa = nazwa
         self.segment = segment
         self.kurs_otwarcia = kurs_otwarcia
-        self.kurs_ostatni = float(kurs_ostatni.replace(',', '.')) if kurs_ostatni != "-" else "-"
+        self.kurs_odniesienia = float(kurs_odniesienia.replace(',', '.')) if isinstance(kurs_odniesienia, str) else kurs_odniesienia
+        self.kurs_ostatni = float(kurs_ostatni.replace(',', '.') if isinstance(kurs_ostatni, str) else kurs_ostatni) if kurs_ostatni != "-" else "-"
         self.data_ostatniej_transakcji = data_ostatniej_transakcji
-        self.kurs_min = kurs_min.replace(',', '.') if kurs_min != "-" else "-"
-        self.kurs_max = kurs_max.replace(',', '.') if kurs_max != "-" else "-"
+        self.kurs_min = float(kurs_min.replace(',', '.') if isinstance(kurs_min, str) else kurs_min) if kurs_min != "-" else "-"
+        self.kurs_max = float(kurs_max.replace(',', '.') if isinstance(kurs_max, str) else kurs_max) if kurs_max != "-" else "-"
         self.najlepsza_oferta_kupna_limit = najlepsza_oferta_kupna_limit
         self.najlepsza_oferta_kupna_wolumen = najlepsza_oferta_kupna_wolumen
         self.najlepsza_oferta_sprzedazy_limit = najlepsza_oferta_sprzedazy_limit
@@ -396,8 +398,16 @@ class BondPortfolio:
     @log_execution
     def total_value(self):
         """Oblicza całkowitą wartość portfela."""
-        return sum(bond.nominal_value * quantity for bond, quantity in self.bonds.items())
-
+        total = 0
+        for bond, transactions in self.bonds.items():
+            for quantity, _ in transactions:  # Iteruj po każdej transakcji
+                try:
+                    kurs_odniesienia = float(bond.kurs_odniesienia)
+                    total += kurs_odniesienia * int(quantity) * bond.nominal_value /100
+                except ValueError:
+                    raise TypeError(
+                        f"Kurs odniesienia dla obligacji {bond.nazwa} nie jest liczbą: {bond.kurs_odniesienia}")
+        return total
     @log_execution
     def average_interest_rate(self):
         """Oblicz średnie bieżące oprocentowanie portfela, biorąc pod uwagę nominalne oprocentowanie obligacji."""
@@ -407,7 +417,7 @@ class BondPortfolio:
             for quantity, _ in quantity_data:
                 total_value += bond.nominal_value * quantity
                 weighted_rate += bond.current_interest * bond.nominal_value * quantity
-        return weighted_rate / total_value if total_value > 0 else 0
+        return round(weighted_rate / total_value, 2) if total_value > 0 else 0
 
     @log_execution
     def bond_summary(self):
@@ -430,14 +440,31 @@ class BondPortfolio:
                 })
         return summary
 
+
+    def compare_bond_values(self, bond, purchase_price, quantity):
+        """Porównuje wartość obligacji w momencie zakupu i obecnie."""
+        bond = next((b for b in self.bonds if b.nazwa == bond.nazwa), None)
+        if not bond:
+            return f"Obligacja {bond.nazwa} nie znaleziona."
+
+        current_value = bond.kurs_ostatni/100 * quantity * bond.nominal_value
+        purchase_value = purchase_price/100 * quantity * bond.nominal_value
+        return {
+            "nazwa": bond.nazwa,
+            "wartość_zakupu": purchase_value,
+            "wartość_aktualna": current_value,
+            "różnica": current_value - purchase_value
+        }
+
     @log_execution
     def bond_performance_analysis(self):
         """Analizuje wydajność obligacji w porównaniu do ich cen zakupu."""
         performance_data = []
         for bond, transactions in self.bonds.items():
             for quantity, purchase_price in transactions:
-                current_value = bond.nominal_value * quantity
-                purchase_value = purchase_price * quantity
+
+                current_value = bond.kurs_odniesienia * bond.nominal_value * quantity / 100
+                purchase_value = purchase_price * bond.nominal_value * quantity / 100
                 roi = ((current_value - purchase_value) / purchase_value) * 100
                 performance_data.append({
                     "Name": bond.nazwa,
@@ -447,6 +474,67 @@ class BondPortfolio:
                     "ROI (%)": roi
                 })
         return performance_data
+
+    @log_execution
+    def evaluate_diversification(self):
+        """
+        Ocena dywersyfikacji portfela obligacji.
+        Kryteria:
+        - Typ oprocentowania (stałe, zmienne: WIBOR3M, WIBOR6M)
+        - Liczba unikalnych emitentów
+        - Zróżnicowanie typów działalności emitentów
+        - Udział największej obligacji w portfelu
+        """
+        if not self.bonds:
+            return "Portfel jest pusty. Brak możliwości oceny dywersyfikacji."
+
+        # Zbieranie danych
+        total_value = self.total_value()
+        emitents = set()  # Unikalne spółki emitujące obligacje
+        sectors = set()  # Typy działalności spółek
+        interest_types = {"stałe": 0, "zmienne (WIBOR3M)": 0, "zmienne (WIBOR6M)": 0}
+        bond_contributions = {}  # Udział poszczególnych obligacji w całym portfelu
+
+        for bond, transactions in self.bonds.items():
+            bond_value = sum(quantity * bond.nominal_value for quantity, _ in transactions)
+            bond_contributions[bond.nazwa] = bond_value / total_value
+            emitents.add(bond.emitent)
+            sectors.add(bond.typ_dzialalnosci)
+
+            # Liczenie typów oprocentowania
+            if bond.interest_type == "stałe":
+                interest_types["stałe"] += bond_value
+            elif bond.interest_type == "zmienne (WIBOR3M)":
+                interest_types["zmienne (WIBOR3M)"] += bond_value
+            elif bond.interest_type == "zmienne (WIBOR6M)":
+                interest_types["zmienne (WIBOR6M)"] += bond_value
+
+        # Obliczanie wskaźników
+        num_emitents = len(emitents)
+        num_sectors = len(sectors)
+        max_bond_contribution = max(bond_contributions.values()) * 100  # Największa obligacja jako % portfela
+        interest_type_diversification = len([t for t, v in interest_types.items() if v > 0])
+
+        # Ocena dywersyfikacji
+        diversification_score = 1
+        if num_emitents >= 5:
+            diversification_score += 1
+        if num_sectors >= 3:
+            diversification_score += 1
+        if max_bond_contribution <= 20:  # Udział pojedynczej obligacji ≤ 20%
+            diversification_score += 1
+        if interest_type_diversification >= 2:  # Różnorodność typów oprocentowania
+            diversification_score += 1
+
+        # Podsumowanie wyników
+        summary = {
+            "Liczba emitentów": num_emitents,
+            "Liczba sektorów": num_sectors,
+            "Największy udział obligacji (%)": round(max_bond_contribution, 2),
+            "Różnorodność typów oprocentowania": interest_type_diversification,
+            "Ocena dywersyfikacji (1-5)": diversification_score,
+        }
+        return summary
 
     @log_execution
     def load_from_xlsx(self, file_name):

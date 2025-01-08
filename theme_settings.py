@@ -417,14 +417,14 @@ def apply_theme(dark_mode=False, theme_file = "data/material-theme.json"):
         }}
         
         /* Errory i powiadomienia */ 
+        
         div[role="alert"] {{
-                background-color: transparent !important;
-                color: {selected_theme['onErrorContainer']} !important;
+                background-color: {selected_theme['error']} !important;
         }}
         
-        div[data-testid="stAlertContainer"] {{
-                background-color: transparent !important;
-                color: {selected_theme['onErrorContainer']} !important;
+        div[role="alert"] > div > div {{
+                background-color: {selected_theme['error']} !important;
+                color: {selected_theme['onError']} !important;
         }}
 
         </style>
@@ -450,7 +450,7 @@ def generate_color_palette(dark_mode=False, theme_file = "data/material-theme.js
     if dark_mode:
         selected_theme = theme['schemes']['light-high-contrast']
     else:
-        selected_theme = theme['schemes']['dark-high-contrast']
+        selected_theme = theme['schemes']['dark']
 
     title_color = selected_theme['primary']
     text_color = selected_theme['onSurface']
@@ -468,8 +468,8 @@ def generate_color_palette(dark_mode=False, theme_file = "data/material-theme.js
     ]
 
     # Konwersja kolorów do przestrzeni RGB
-    start_rgb = mcolors.to_rgb(selected_theme['errorContainer'])
-    end_rgb = mcolors.to_rgb(selected_theme['inversePrimary'])
+    start_rgb = mcolors.to_rgb(selected_theme['onTertiaryContainer'])
+    end_rgb = mcolors.to_rgb(selected_theme['onPrimary'])
 
     small_palette = [
         mcolors.to_hex(
