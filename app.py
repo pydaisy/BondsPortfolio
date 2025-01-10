@@ -244,314 +244,338 @@ if not st.session_state['bonds_df'].empty:
         use_container_width = True,
         update_mode = GridUpdateMode.MODEL_CHANGED,
         theme='balham',
-        height = 500
+        height = 700
     )
 
-# Porównanie kilku obligacji
-st.subheader("Wyszukaj obligacje")
+    # Dodanie zakładek
+    tabs = st.tabs(["Wyszukaj obligacje", "Analiza portfela"])
 
-# Input: lista nazw obligacji
-bond_names_input = st.text_area(
-    "Wpisz nazwy obligacji jakich chcesz sprawdzić szczegóły (oddzielone przecinkami):",
-    value = st.session_state.get('bond_name_input', '')
-)
+    with tabs[0]:
 
-# Przechowywanie danych obligacji w session_state
-if 'bond_details' not in st.session_state:
-    st.session_state['bond_details'] = {}
+        # Porównanie kilku obligacji
+        st.subheader("Wyszukaj obligacje")
 
-# Przechowywanie portfela w session_state
-if 'portfolio' not in st.session_state:
-    st.session_state['portfolio'] = BondPortfolio()
+        # Input: lista nazw obligacji
+        bond_names_input = st.text_area(
+            "Wpisz nazwy obligacji jakich chcesz sprawdzić szczegóły (oddzielone przecinkami):",
+            value = st.session_state.get('bond_name_input', '')
+        )
 
-if bond_names_input:
-    bond_list = [name.strip() for name in bond_names_input.split(",")]
+        # Przechowywanie danych obligacji w session_state
+        if 'bond_details' not in st.session_state:
+            st.session_state['bond_details'] = {}
 
-    # Scrapowanie danych tylko dla obligacji wpisanych
-    with st.spinner("Ładowanie danych może zająć chwilkę..."):
-        for bond_name in bond_list:
-            if bond_name not in st.session_state['bond_details']:
-                bond_data = scraper.scrape_details(bond_name)
-                if bond_data:
-                    st.session_state['bond_details'][bond_name] = bond_data
+        # Przechowywanie portfela w session_state
+        if 'portfolio' not in st.session_state:
+            st.session_state['portfolio'] = BondPortfolio()
 
-    # Pobranie szczegółów dla wszystkich wybranych obligacji
-    bond_details_list = [st.session_state['bond_details'][bond_name] for bond_name in bond_list if
-                         bond_name in st.session_state['bond_details']]
+        if bond_names_input:
+            bond_list = [name.strip() for name in bond_names_input.split(",")]
 
-    if bond_details_list:
-        st.subheader("Analiza inwestycji")
+            # Scrapowanie danych tylko dla obligacji wpisanych
+            with st.spinner("Ładowanie danych może zająć chwilkę..."):
+                for bond_name in bond_list:
+                    if bond_name not in st.session_state['bond_details']:
+                        bond_data = scraper.scrape_details(bond_name)
+                        if bond_data:
+                            st.session_state['bond_details'][bond_name] = bond_data
 
-        for bond_data in bond_details_list:
-            # Utworzenie obiektu obligacji
-            bond = create_bond_instance(bond_data)
+            # Pobranie szczegółów dla wszystkich wybranych obligacji
+            bond_details_list = [st.session_state['bond_details'][bond_name] for bond_name in bond_list if
+                                 bond_name in st.session_state['bond_details']]
 
-            # Układ z czterema kolumnami
-            col1, col2, col3 = st.columns([1, 1.3, 1.8])
+            if bond_details_list:
+                st.subheader("Analiza inwestycji")
 
-            # Kolumna 1: Szczegóły obligacji
+                for bond_data in bond_details_list:
+                    # Utworzenie obiektu obligacji
+                    bond = create_bond_instance(bond_data)
+
+                    # Układ z czterema kolumnami
+                    col1, col2, col3 = st.columns([1, 1.3, 1.8])
+
+                    # Kolumna 1: Szczegóły obligacji
+                    with col1:
+                        st.markdown(f"### **{bond.nazwa}**")
+                        st.write(f"#### *{bond.typ_dzialalnosci}*\n")
+                        st.write(f"**Wartość nominalna:** {bond.nominal_value} PLN")
+                        st.write(f"**Typ oprocentowania:** {bond.interest_type}")
+                        st.write(f"**Oprocentowanie:** {bond.nominal_margin}")
+                        st.write(f"**Narosłe odsetki:** {bond.accrued_interest}")
+                        st.write(f"**Wartość Kuponu:** {bond.calculate_coupon()} PLN")
+                        st.write(f"**Lata do wykupu:** {bond.years_to_maturity(date.today())}")
+                        st.write(f"**Model prognozy:** {bond.model_of_forecast}")
+
+                    # Kolumna 2: Wejścia użytkownika
+                    with col2:
+                        st.markdown("### Dane rynkowe")
+                        colm1, colm2 = st.columns([1, 1])
+                        with colm1:
+                            st.metric("Ostatni kurs", bond.kurs_ostatni)
+                            st.metric("Kurs minimalny", bond.kurs_min)
+                            st.write("Najlepsza oferta kupna")
+                            st.metric("Limit", bond.najlepsza_oferta_kupna_limit)
+                            st.write("Najlepsza oferta sprzedaży")
+                            st.metric("Limit", bond.najlepsza_oferta_sprzedazy_limit)
+                        with colm2:
+                            st.metric("Data ostatniej transakcji", bond.data_ostatniej_transakcji)
+                            st.metric("Kurs maksymalny", bond.kurs_max)
+                            st.markdown("&#160;")
+                            st.metric("Wolumen", bond.najlepsza_oferta_kupna_wolumen)
+                            st.markdown("&#160;")
+                            st.metric("Wolumen", bond.najlepsza_oferta_sprzedazy_wolumen)
+
+                    # Kolumna 3: Dane wejściowe inwestycji
+
+                    with col3:
+                        st.markdown("### Kalkulator rentowności obligacji")
+                        col31, col32 = st.columns([1,1])
+                        with col31:
+                            num_bonds = st.number_input(
+                                f"Liczba obligacji do zakupu:",
+                                min_value = 1, value = 1, step = 1, key = f"num_{bond.nazwa}"
+                            )
+
+                            # Sprawdź, czy kurs_ostatni jest liczbą
+                            if isinstance(bond.kurs_ostatni, (int, float)) and not isinstance(bond.kurs_ostatni, bool):
+                                domyslna_cena = bond.kurs_ostatni
+                            else:
+                                domyslna_cena = 100.0
+
+                            cena_nabycia = st.number_input(
+                                f"Cena zakupu za obligację:",
+                                min_value = 0.0, value = domyslna_cena, step = 0.01, key = f"price_{bond.nazwa}"
+                            )
+
+                        with col32:
+                            total_investment = num_bonds * cena_nabycia
+                            bond_ytm_brutto = bond.ytm_brutto(cena_nabycia)
+                            bond_ytm_netto = bond.ytm_netto(cena_nabycia)
+                            bond_ekwivalent_ytm_brutto = bond.ekwivalent_ytm_brutto(cena_nabycia)
+                            bond_duration_macaulay = bond.macaulay_duration(cena_nabycia)
+                            bond_duration_modified = bond.modified_duration(cena_nabycia)
+
+                            st.write(f"**YTM (Brutto):** {bond_ytm_brutto:.2f}%")
+                            st.write(f"**YTM (Netto):** {bond_ytm_netto:.2f}%")
+                            st.write(f"**Ekwiwalent YTM brutto:** {bond_ekwivalent_ytm_brutto:.2f}%")
+                            st.write(f"**Czas trwania Macaulay'a (w latach):** {bond_duration_macaulay:.2f}")
+                            st.write(f"**Zmodyfikowany czas trwania (w latach):** {bond_duration_modified:.2f}")
+
+                            # Dodanie obligacji do portfela
+                            if st.button(f"Dodaj {bond.nazwa} do portfela", key = f"add_{bond.nazwa}"):
+                                myportfolio.add_bond(bond, num_bonds, cena_nabycia)
+                                add_to_portfolio_xlsx(
+                                    'portfolio_obligacje.xlsx',
+                                    bond.nazwa,
+                                    bond.typ_dzialalnosci,
+                                    cena_nabycia,
+                                    num_bonds
+                                )
+                                st.success(f"Dodano {num_bonds} obligacji {bond.nazwa} do portfela.")
+
+                    # Separator pomiędzy obligacjami
+                    st.divider()
+
+    with tabs[1]:
+        # Inicjalizacja portfela w sesji
+        if "portfolio" not in st.session_state:
+            st.session_state["portfolio"] = BondPortfolio()
+            portfolio = st.session_state["portfolio"]
+
+
+        # Załaduj dane o typach działalności z pliku Excel
+        df_company_types = pd.read_excel('corp_type.xlsx')  # Upewnij się, że plik jest poprawnie załadowany
+
+        # Sprawdzenie, czy w portfelu są obligacje
+        if len(myportfolio.bonds) > 0:
+
+            st.subheader("Analiza portfela")
+
+            # Iteracja po obligacjach w portfelu
+            for bond in myportfolio.bonds:
+                with st.expander(f"{bond.nazwa}"):  # Nagłówek expandera z nazwą obligacji
+                    # Szczegóły obligacji
+                    st.write(f"Emitent: {bond.emitent}")
+                    st.write(f"Oprocentowanie: {bond.current_interest}% ({bond.interest_type})")
+                    st.write(f"Data zapadalności: {bond.maturity_date}")
+                    st.write(f"Wartość nominalna: {bond.nominal_value}")
+                    #st.write(f"Obecna wartość rynkowa: {bond.market_value}")
+                    #st.write(f"Liczba jednostek w portfelu: {myportfolio.get_total_bonds(bond)}")
+
+                    # Opcjonalnie można dodać wykresy specyficzne dla tej obligacji
+                    #bond_performance = myportfolio.get_bond_performance(bond)
+                    #performance_df = pd.DataFrame(bond_performance)
+                    #st.write("Wydajność obligacji:")
+                    #st.table(performance_df)
+
+            # Uzyskujemy podsumowanie obligacji
+            # bonds_summary = myportfolio.bond_summary()
+
+            # Konwersja do DataFrame i wyświetlanie tabeli
+            # bonds_df = pd.DataFrame(bonds_summary)
+            # st.table(bonds_df)
+
+            # Analiza wydajności obligacji
+            performance_data = myportfolio.bond_performance_analysis()
+            performance_df = pd.DataFrame(performance_data)
+            st.subheader("Analiza wydajności obligacji")
+            st.table(performance_df)
+
+            # Tworzenie listy dla interest_type i model_of_forecast na podstawie liczby obligacji w portfelu
+            data = []
+            for bond in myportfolio.bonds:
+                total_bonds = myportfolio.get_total_bonds(bond)  # Uzyskujemy liczbę obligacji z portfela
+                for _ in range(total_bonds):  # Dodajemy każdą obligację tyle razy, ile jej w portfelu
+                    data.append({
+                        "interest_type": bond.interest_type,
+                        "model_of_forecast": bond.model_of_forecast if bond.interest_type == "zmienne" else ""
+                    })
+
+            # Konwersja do DataFrame
+            df = pd.DataFrame(data)
+
+            # Mapa kolorów
+            color_palette = generate_color_palette()['small_palette']
+
+            # Wykres sunburst
+            fig_sunburst = px.sunburst(
+                df,
+                path=["interest_type", "model_of_forecast"],
+                title="Struktura portfela według typu oprocentowania i modelu prognozy",
+                color="interest_type",
+                color_discrete_sequence=color_palette,  # Użycie mapy kolorów
+            )
+
+            # Ustawienia czcionki i transparentne tło legendy
+            fig_sunburst.update_layout(
+                title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
+                font=dict(family="Poppins", size=14),  # Czcionka wykresów
+                legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
+            )
+
+            fig_sunburst.update_traces(
+                hovertemplate="<b>Oprocentowanie %{id}</b><br>Liczba obligacji:%{value}<br>Procentowy udział w portfelu: %{percentEntry}<br>",
+                hoverlabel=dict(font_size=12, font_family="Poppins")
+            )
+
+            # Wykres działalności
+            activity_types = [bond.typ_dzialalnosci for bond in myportfolio.bonds for _ in range(myportfolio.get_total_bonds(bond))]  # Uwzględniamy wolumen
+            activity_counts = pd.Series(activity_types).value_counts()
+
+            # Procentowy podział według typu działalności
+            fig_activity = px.pie(
+                names=activity_counts.index,
+                values=activity_counts.values,
+                title="Podział portfela według typu działalności",
+                hole=0.5,
+                color_discrete_sequence=color_palette  # Użycie mapy kolorów
+            )
+
+            # Ustawienia czcionki i transparentne tło legendy
+            fig_activity.update_layout(
+                title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
+                font=dict(family="Poppins", size=14),  # Czcionka wykresów
+                legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
+            )
+
+            fig_activity.update_traces(
+                hovertemplate="<b>%{label}</b><br>Liczba obligacji: %{value}</br>",
+                hoverlabel=dict(font_size=12, font_family="Poppins")
+            )
+
+            # Rozkład dat zapadalności
+            maturity_dates = [
+                bond.maturity_date for bond in myportfolio.bonds
+                for _ in range(myportfolio.get_total_bonds(bond))
+            ]  # Lista dat zapadalności uwzględniająca wolumen
+
+            # Rodzaj oprocentowania (stałe/zmienne)
+            interest_types = [
+                bond.interest_type for bond in myportfolio.bonds
+                for _ in range(myportfolio.get_total_bonds(bond))
+            ]  # Uwzględnienie rodzaju oprocentowania dla każdej obligacji
+
+            # Konwersja na DataFrame i dodanie roku zapadalności oraz rodzaju oprocentowania
+            maturity_df = pd.DataFrame({
+                'Data zapadalności': pd.to_datetime(maturity_dates),
+                'Rodzaj oprocentowania': interest_types
+            })
+            maturity_df['Rok zapadalności'] = maturity_df['Data zapadalności'].dt.year
+
+            # Dynamiczny histogram z interwałami czasowymi i podziałem na rodzaj oprocentowania
+            fig_maturity = px.histogram(
+                maturity_df,
+                x = 'Data zapadalności',
+                color = 'Rodzaj oprocentowania',  # Podział na stałe i zmienne oprocentowanie
+                title = "Rozkład dat zapadalności obligacji",
+                labels = {'x': 'Data zapadalności', 'y': 'Liczba obligacji'},
+                color_discrete_map = {'stałe': generate_color_palette()['middle'], 'zmienne': generate_color_palette()['title']},  # Przypisanie kolorów
+                nbins = 20  # Liczba binów do podziału na przedziały
+            )
+
+            # Dostosowanie wykresu
+            fig_maturity.update_layout(
+                title_font = dict(family = "Poppins", size = 18),  # Czcionka dla tytułu
+                font = dict(family = "Poppins", size = 14),  # Czcionka wykresów
+                xaxis_title = "Data zapadalności",
+                yaxis_title = "Liczba obligacji",
+                legend = dict(bgcolor = "rgba(0,0,0,0)")  # Przezroczyste tło legendy
+            )
+
+            # Dodanie tekstu dla zakresów
+            fig_maturity.update_traces(
+                hovertemplate="<b>Data zapadalności:</b> %{x|%Y-%m-%d}<br><b>Liczba obligacji:</b> %{y}<br><b>Rodzaj oprocentowania:</b> %{color}"
+            )
+
+            col1, col2, col3 = st.columns([1,1,1])
+
             with col1:
-                st.markdown(f"### **{bond.nazwa}**")
-                st.write(f"#### *{bond.typ_dzialalnosci}*\n")
-                st.write(f"**Wartość nominalna:** {bond.nominal_value} PLN")
-                st.write(f"**Typ oprocentowania:** {bond.interest_type}")
-                st.write(f"**Oprocentowanie:** {bond.nominal_margin}")
-                st.write(f"**Narosłe odsetki:** {bond.accrued_interest}")
-                st.write(f"**Wartość Kuponu:** {bond.calculate_coupon()} PLN")
-                st.write(f"**Lata do wykupu:** {bond.years_to_maturity(date.today())}")
-                st.write(f"**Model prognozy:** {bond.model_of_forecast}")
+                # Średnie oprocentowanie
+                avg_interest = myportfolio.average_interest_rate()
+                st.metric(f"Średnie oprocentowanie portfela", avg_interest)
 
-            # Kolumna 2: Wejścia użytkownika
             with col2:
-                st.markdown("### Dane rynkowe")
-                colm1, colm2 = st.columns([1, 1])
-                with colm1:
-                    st.metric("Ostatni kurs", bond.kurs_ostatni)
-                    st.metric("Kurs minimalny", bond.kurs_min)
-                    st.write("Najlepsza oferta kupna")
-                    st.metric("Limit", bond.najlepsza_oferta_kupna_limit)
-                    st.write("Najlepsza oferta sprzedaży")
-                    st.metric("Limit", bond.najlepsza_oferta_sprzedazy_limit)
-                with colm2:
-                    st.metric("Data ostatniej transakcji", bond.data_ostatniej_transakcji)
-                    st.metric("Kurs maksymalny", bond.kurs_max)
-                    st.markdown("&#160;")
-                    st.metric("Wolumen", bond.najlepsza_oferta_kupna_wolumen)
-                    st.markdown("&#160;")
-                    st.metric("Wolumen", bond.najlepsza_oferta_sprzedazy_wolumen)
-
-            # Kolumna 3: Dane wejściowe inwestycji
+                # Całkowita wartość portfela
+                total_value = myportfolio.total_value()
+                st.metric(f"Całkowita wartość portfela", total_value)
 
             with col3:
-                st.markdown("### Kalkulator rentowności obligacji")
-                col31, col32 = st.columns([1,1])
-                with col31:
-                    num_bonds = st.number_input(
-                        f"Liczba obligacji do zakupu:",
-                        min_value = 1, value = 1, step = 1, key = f"num_{bond.nazwa}"
-                    )
+                # Rozkład dat zapadalności obligacji
+                st.plotly_chart(fig_maturity)
 
-                    # Sprawdź, czy kurs_ostatni jest liczbą
-                    if isinstance(bond.kurs_ostatni, (int, float)) and not isinstance(bond.kurs_ostatni, bool):
-                        domyslna_cena = bond.kurs_ostatni
-                    else:
-                        domyslna_cena = 100.0
+            # Wyświetlenie wykresów w układzie obok siebie
+            col1, col2 = st.columns(2)
 
-                    cena_nabycia = st.number_input(
-                        f"Cena zakupu za obligację:",
-                        min_value = 0.0, value = domyslna_cena, step = 0.01, key = f"price_{bond.nazwa}"
-                    )
+            with col1:
+                st.plotly_chart(fig_sunburst)
 
-                with col32:
-                    total_investment = num_bonds * cena_nabycia
-                    bond_ytm_brutto = bond.ytm_brutto(cena_nabycia)
-                    bond_ytm_netto = bond.ytm_netto(cena_nabycia)
-                    bond_ekwivalent_ytm_brutto = bond.ekwivalent_ytm_brutto(cena_nabycia)
-                    bond_duration_macaulay = bond.macaulay_duration(cena_nabycia)
-                    bond_duration_modified = bond.modified_duration(cena_nabycia)
-
-                    st.write(f"**YTM (Brutto):** {bond_ytm_brutto:.2f}%")
-                    st.write(f"**YTM (Netto):** {bond_ytm_netto:.2f}%")
-                    st.write(f"**Ekwiwalent YTM brutto:** {bond_ekwivalent_ytm_brutto:.2f}%")
-                    st.write(f"**Czas trwania Macaulay'a (w latach):** {bond_duration_macaulay:.2f}")
-                    st.write(f"**Zmodyfikowany czas trwania (w latach):** {bond_duration_modified:.2f}")
-
-                    # Dodanie obligacji do portfela
-                    if st.button(f"Dodaj {bond.nazwa} do portfela", key = f"add_{bond.nazwa}"):
-                        myportfolio.add_bond(bond, num_bonds, cena_nabycia)
-                        add_to_portfolio_xlsx(
-                            'portfolio_obligacje.xlsx',
-                            bond.nazwa,
-                            bond.typ_dzialalnosci,
-                            cena_nabycia,
-                            num_bonds
-                        )
-                        st.success(f"Dodano {num_bonds} obligacji {bond.nazwa} do portfela.")
-
-            # Separator pomiędzy obligacjami
-            st.divider()
-
-# Inicjalizacja portfela w sesji
-if "portfolio" not in st.session_state:
-    st.session_state["portfolio"] = BondPortfolio()
-    portfolio = st.session_state["portfolio"]
+            with col2:
+                st.plotly_chart(fig_activity)
 
 
-# Załaduj dane o typach działalności z pliku Excel
-df_company_types = pd.read_excel('corp_type.xlsx')  # Upewnij się, że plik jest poprawnie załadowany
+            diversification_result = myportfolio.evaluate_diversification()
 
-# Sprawdzenie, czy w portfelu są obligacje
-if len(myportfolio.bonds) > 0:
+            # Pobranie wartości według kluczy
+            liczba_emitentow = diversification_result["Liczba emitentów"]
+            liczba_sektorow = diversification_result["Liczba sektorów"]
+            najwiekszy_udzial = diversification_result["Największy udział obligacji (%)"]
+            liczba_typow_oprocentowania = diversification_result["Różnorodność typów oprocentowania"]
+            ocena_dywersyfikacji = diversification_result["Ocena dywersyfikacji (1-5)"]
 
-    st.subheader("Analiza portfela")
+            # Wyświetlenie metryk w Streamlit
+            st.subheader("Ocena dywersyfikacji portfela obligacji")
+            st.metric("Liczba emitentów", liczba_emitentow)
+            st.metric("Liczba sektorów", liczba_sektorow)
+            st.metric("Największy udział obligacji (%)", f"{najwiekszy_udzial:.2f}%")
+            st.metric("Różnorodność typów oprocentowania", liczba_typow_oprocentowania)
+            st.metric("Ocena dywersyfikacji (1-5)", ocena_dywersyfikacji)
 
-    # Uzyskujemy podsumowanie obligacji
-    # bonds_summary = myportfolio.bond_summary()
+            if najwiekszy_udzial > 15:
+                st.warning("Zbyt duży udział jednej obligacji! Rozważ dodanie obligacji innych emitentów.")
+            if liczba_sektorow < 3:
+                st.warning("Zbyt mała różnorodność sektorów. Poszukaj obligacji z innych branż.")
+            if liczba_typow_oprocentowania < 2:
+                st.warning("Rozważ dywersyfikację typów oprocentowania, np. dodanie obligacji o stałym oprocentowaniu.")
 
-    # Konwersja do DataFrame i wyświetlanie tabeli
-    # bonds_df = pd.DataFrame(bonds_summary)
-    # st.table(bonds_df)
-
-    # Analiza wydajności obligacji
-    performance_data = myportfolio.bond_performance_analysis()
-    performance_df = pd.DataFrame(performance_data)
-    st.subheader("Analiza wydajności obligacji")
-    st.table(performance_df)
-
-    # Tworzenie listy dla interest_type i model_of_forecast na podstawie liczby obligacji w portfelu
-    data = []
-    for bond in myportfolio.bonds:
-        total_bonds = myportfolio.get_total_bonds(bond)  # Uzyskujemy liczbę obligacji z portfela
-        for _ in range(total_bonds):  # Dodajemy każdą obligację tyle razy, ile jej w portfelu
-            data.append({
-                "interest_type": bond.interest_type,
-                "model_of_forecast": bond.model_of_forecast if bond.interest_type == "zmienne" else ""
-            })
-
-    # Konwersja do DataFrame
-    df = pd.DataFrame(data)
-
-    # Mapa kolorów
-    color_palette = generate_color_palette()['small_palette']
-
-    # Wykres sunburst
-    fig_sunburst = px.sunburst(
-        df,
-        path=["interest_type", "model_of_forecast"],
-        title="Struktura portfela według typu oprocentowania i modelu prognozy",
-        color="interest_type",
-        color_discrete_sequence=color_palette,  # Użycie mapy kolorów
-    )
-
-    # Ustawienia czcionki i transparentne tło legendy
-    fig_sunburst.update_layout(
-        title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
-        font=dict(family="Poppins", size=14),  # Czcionka wykresów
-        legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
-    )
-
-    fig_sunburst.update_traces(
-        hovertemplate="<b>Oprocentowanie %{id}</b><br>Liczba obligacji:%{value}<br>Procentowy udział w portfelu: %{percentEntry}<br>",
-        hoverlabel=dict(font_size=12, font_family="Poppins")
-    )
-
-    # Wykres działalności
-    activity_types = [bond.typ_dzialalnosci for bond in myportfolio.bonds for _ in range(myportfolio.get_total_bonds(bond))]  # Uwzględniamy wolumen
-    activity_counts = pd.Series(activity_types).value_counts()
-
-    # Procentowy podział według typu działalności
-    fig_activity = px.pie(
-        names=activity_counts.index,
-        values=activity_counts.values,
-        title="Podział portfela według typu działalności",
-        hole=0.5,
-        color_discrete_sequence=color_palette  # Użycie mapy kolorów
-    )
-
-    # Ustawienia czcionki i transparentne tło legendy
-    fig_activity.update_layout(
-        title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
-        font=dict(family="Poppins", size=14),  # Czcionka wykresów
-        legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
-    )
-
-    fig_activity.update_traces(
-        hovertemplate="<b>%{label}</b><br>Liczba obligacji: %{value}</br>",
-        hoverlabel=dict(font_size=12, font_family="Poppins")
-    )
-
-    # Rozkład dat zapadalności
-    maturity_dates = [
-        bond.maturity_date for bond in myportfolio.bonds
-        for _ in range(myportfolio.get_total_bonds(bond))
-    ]  # Lista dat zapadalności uwzględniająca wolumen
-
-    # Rodzaj oprocentowania (stałe/zmienne)
-    interest_types = [
-        bond.interest_type for bond in myportfolio.bonds
-        for _ in range(myportfolio.get_total_bonds(bond))
-    ]  # Uwzględnienie rodzaju oprocentowania dla każdej obligacji
-
-    # Konwersja na DataFrame i dodanie roku zapadalności oraz rodzaju oprocentowania
-    maturity_df = pd.DataFrame({
-        'Data zapadalności': pd.to_datetime(maturity_dates),
-        'Rodzaj oprocentowania': interest_types
-    })
-    maturity_df['Rok zapadalności'] = maturity_df['Data zapadalności'].dt.year
-
-    # Dynamiczny histogram z interwałami czasowymi i podziałem na rodzaj oprocentowania
-    fig_maturity = px.histogram(
-        maturity_df,
-        x = 'Data zapadalności',
-        color = 'Rodzaj oprocentowania',  # Podział na stałe i zmienne oprocentowanie
-        title = "Rozkład dat zapadalności obligacji",
-        labels = {'x': 'Data zapadalności', 'y': 'Liczba obligacji'},
-        color_discrete_map = {'stałe': generate_color_palette()['middle'], 'zmienne': generate_color_palette()['title']},  # Przypisanie kolorów
-        nbins = 20  # Liczba binów do podziału na przedziały
-    )
-
-    # Dostosowanie wykresu
-    fig_maturity.update_layout(
-        title_font = dict(family = "Poppins", size = 18),  # Czcionka dla tytułu
-        font = dict(family = "Poppins", size = 14),  # Czcionka wykresów
-        xaxis_title = "Data zapadalności",
-        yaxis_title = "Liczba obligacji",
-        legend = dict(bgcolor = "rgba(0,0,0,0)")  # Przezroczyste tło legendy
-    )
-
-    # Dodanie tekstu dla zakresów
-    fig_maturity.update_traces(
-        hovertemplate="<b>Data zapadalności:</b> %{x|%Y-%m-%d}<br><b>Liczba obligacji:</b> %{y}<br><b>Rodzaj oprocentowania:</b> %{color}"
-    )
-
-    col1, col2, col3 = st.columns([1,1,1])
-
-    with col1:
-        # Średnie oprocentowanie
-        avg_interest = myportfolio.average_interest_rate()
-        st.metric(f"Średnie oprocentowanie portfela", avg_interest)
-
-    with col2:
-        # Całkwoita wartość portfela
-        total_value = myportfolio.total_value()
-        st.metric(f"Całkowita wartość portfela", total_value)
-
-    with col3:
-        st.plotly_chart(fig_maturity)
-
-    # Wyświetlenie wykresów w układzie obok siebie
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.plotly_chart(fig_sunburst)
-
-    with col2:
-        st.plotly_chart(fig_activity)
-
-
-    diversification_result = myportfolio.evaluate_diversification()
-
-    # Pobranie wartości według kluczy
-    liczba_emitentow = diversification_result["Liczba emitentów"]
-    liczba_sektorow = diversification_result["Liczba sektorów"]
-    najwiekszy_udzial = diversification_result["Największy udział obligacji (%)"]
-    liczba_typow_oprocentowania = diversification_result["Różnorodność typów oprocentowania"]
-    ocena_dywersyfikacji = diversification_result["Ocena dywersyfikacji (1-5)"]
-
-    # Wyświetlenie metryk w Streamlit
-    st.subheader("Ocena dywersyfikacji portfela obligacji")
-    st.metric("Liczba emitentów", liczba_emitentow)
-    st.metric("Liczba sektorów", liczba_sektorow)
-    st.metric("Największy udział obligacji (%)", f"{najwiekszy_udzial:.2f}%")
-    st.metric("Różnorodność typów oprocentowania", liczba_typow_oprocentowania)
-    st.metric("Ocena dywersyfikacji (1-5)", ocena_dywersyfikacji)
-
-    if najwiekszy_udzial > 15:
-        st.warning("Zbyt duży udział jednej obligacji! Rozważ dodanie obligacji innych emitentów.")
-    if liczba_sektorow < 3:
-        st.warning("Zbyt mała różnorodność sektorów. Poszukaj obligacji z innych branż.")
-    if liczba_typow_oprocentowania < 2:
-        st.warning("Rozważ dywersyfikację typów oprocentowania, np. dodanie obligacji o stałym oprocentowaniu.")
-
-else:
-    st.warning("Twój portfel jest pusty. Dodaj obligacje, aby zobaczyć analizę.")
+        else:
+            st.warning("Twój portfel jest pusty. Dodaj obligacje, aby zobaczyć analizę.")
