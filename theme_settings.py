@@ -398,7 +398,7 @@ def apply_theme(dark_mode=False, theme_file = "data/material-theme.json"):
             fill: transparent !important; 
         }}
 
-         .stHorizontalBlock:hover {{
+         .stContainerBlock:hover {{
 
             background-color: {selected_theme['onSurface']}{alpha} !important; /* Jasne tło */
             box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1) !important; /* Cień */
@@ -425,6 +425,13 @@ def apply_theme(dark_mode=False, theme_file = "data/material-theme.json"):
         div[role="alert"] > div > div {{
                 background-color: {selected_theme['error']} !important;
                 color: {selected_theme['onError']} !important;
+        }}
+        
+        div[data-baseweb="select"] > div > div > div {{
+        
+            background-color: transparent !important;
+        
+
         }}
 
         </style>
