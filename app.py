@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -389,37 +388,104 @@ if not st.session_state['bonds_df'].empty:
         # Sprawdzenie, czy w portfelu są obligacje
         if len(myportfolio.bonds) > 0:
 
-            st.subheader("Analiza portfela")
 
-            # Iteracja po obligacjach w portfelu
-            for bond in myportfolio.bonds:
-                with st.expander(f"{bond.nazwa}"):  # Nagłówek expandera z nazwą obligacji
-                    # Szczegóły obligacji
-                    st.write(f"Emitent: {bond.emitent}")
-                    st.write(f"Oprocentowanie: {bond.current_interest}% ({bond.interest_type})")
-                    st.write(f"Data zapadalności: {bond.maturity_date}")
-                    st.write(f"Wartość nominalna: {bond.nominal_value}")
-                    #st.write(f"Obecna wartość rynkowa: {bond.market_value}")
-                    #st.write(f"Liczba jednostek w portfelu: {myportfolio.get_total_bonds(bond)}")
+            # Generowanie alertów na podstawie stałych progów
+            try:
+                alerts = myportfolio.generate_alerts()
+                if alerts:
+                    for alert in alerts:
+                        st.write(f"⚠️ {alert}")
+            except Exception as e:
+                st.error(f"Nie udało się wygenerować alertów: {e}")
 
-                    # Opcjonalnie można dodać wykresy specyficzne dla tej obligacji
-                    #bond_performance = myportfolio.get_bond_performance(bond)
-                    #performance_df = pd.DataFrame(bond_performance)
-                    #st.write("Wydajność obligacji:")
-                    #st.table(performance_df)
+            diversification_result = myportfolio.evaluate_diversification()
 
-            # Uzyskujemy podsumowanie obligacji
-            # bonds_summary = myportfolio.bond_summary()
+            # Pobranie wartości według kluczy
+            liczba_emitentow = diversification_result["Liczba emitentów"]
+            liczba_sektorow = diversification_result["Liczba sektorów"]
+            najwiekszy_udzial = diversification_result["Największy udział obligacji (%)"]
+            liczba_typow_oprocentowania = diversification_result["Różnorodność typów oprocentowania"]
+            ocena_dywersyfikacji = diversification_result["Ocena dywersyfikacji (1-5)"]
+            avg_interest = myportfolio.average_interest_rate()
+            total_value = myportfolio.total_value()
 
-            # Konwersja do DataFrame i wyświetlanie tabeli
-            # bonds_df = pd.DataFrame(bonds_summary)
-            # st.table(bonds_df)
+            col12, col22, col32, col42, col52, col62 = st.columns([1,1,1,1,1,1])
 
-            # Analiza wydajności obligacji
-            performance_data = myportfolio.bond_performance_analysis()
-            performance_df = pd.DataFrame(performance_data)
-            st.subheader("Analiza wydajności obligacji")
-            st.table(performance_df)
+            with col12:
+                st.metric("Liczba emitentów", liczba_emitentow)
+            with col22:
+                st.metric("Największy udział obligacji (%)", f"{najwiekszy_udzial:.2f}%")
+            with col32:
+                st.metric("Liczba sektorów", liczba_sektorow)
+            with col42:
+                st.metric("Różnorodność typów oprocentowania", liczba_typow_oprocentowania)
+            with col52:
+                st.metric(f"Średnie oprocentowanie portfela", avg_interest)
+            with col62:
+                st.metric(f"Całkowita wartość portfela", total_value)
+
+            if ocena_dywersyfikacji < 3:
+                color = "#fa5568"
+            elif ocena_dywersyfikacji == 3:
+                color = "#f1ff54"
+            else:
+                color = "#bef299"
+
+            # Przedstawienie oceny dywersyfikacji w większym formacie z odpowiednim kolorem
+            st.markdown(
+                f"<h1 style='color:{color}; text-align: center;'>Ocena dywersyfikacji (1-5): {ocena_dywersyfikacji}</h1>",
+                unsafe_allow_html = True
+            )
+
+            if najwiekszy_udzial > 15:
+                st.warning("Zbyt duży udział jednej obligacji! Rozważ dodanie obligacji innych emitentów.")
+            if liczba_sektorow < 3:
+                st.warning("Zbyt mała różnorodność sektorów. Poszukaj obligacji z innych branż.")
+            if liczba_typow_oprocentowania < 2:
+                st.warning(
+                    "Rozważ dywersyfikację typów oprocentowania, np. dodanie obligacji o stałym oprocentowaniu.")
+
+            col1, col2 = st.columns([1,5])
+
+            with col1:
+                st.subheader("Obligacje w portfelu")
+                # Iteracja po obligacjach w portfelu
+                for bond in myportfolio.bonds:
+                    with st.expander(f"{bond.nazwa}"):  # Nagłówek expandera z nazwą obligacji
+                        # Szczegóły obligacji
+                        st.write(f"Emitent: {bond.emitent}")
+                        st.write(f"Oprocentowanie: {bond.current_interest}% ({bond.interest_type})")
+                        st.write(f"Data zapadalności: {bond.maturity_date}")
+                        st.write(f"Wartość nominalna: {bond.nominal_value}")
+
+            with col2:
+
+                # Sekcja rankingów obligacji
+                st.subheader("Ranking obligacji w portfelu")
+
+                # Wybór kryterium rankingu
+                criteria = {
+                    "YTM": "YTM (%)",
+                    "Obecne oprocentowanie": "Obecne oprocentowanie (%)",
+                    "Data zapadalności": "Data zapadalności"
+                }
+
+                selected_criterion = st.selectbox(
+                    "Wybierz kryterium rankingu:",
+                    list(criteria.keys()),
+                    index = 0
+                )
+
+                # Generowanie rankingu
+                try:
+                    ranked_bonds = myportfolio.rank_bonds(criterion = criteria[selected_criterion])
+                    df = pd.DataFrame(ranked_bonds)
+                    AgGrid(df, fit_columns_on_grid_load = True)
+                except Exception as e:
+                    st.error(f"Nie udało się wygenerować rankingu: {e}")
+
+
+
 
             # Tworzenie listy dla interest_type i model_of_forecast na podstawie liczby obligacji w portfelu
             data = []
@@ -527,17 +593,58 @@ if not st.session_state['bonds_df'].empty:
                 hovertemplate="<b>Data zapadalności:</b> %{x|%Y-%m-%d}<br><b>Liczba obligacji:</b> %{y}<br><b>Rodzaj oprocentowania:</b> %{color}"
             )
 
+
+            all_coupons = []  # Lista na dane kuponowe
+            for bond in myportfolio.bonds:
+                try:
+                    # Pobierz daty kuponów i ich wartości
+                    coupon_dates = bond.generate_coupon_dates()
+                    coupon_values = [bond.calculate_coupon()] * len(coupon_dates)
+
+                    # Tworzenie DataFrame dla obligacji
+                    bond_data = pd.DataFrame({
+                        "Data": coupon_dates,
+                        "Wartość kuponu": coupon_values,
+                        "Obligacja": bond.nazwa
+                    })
+                    all_coupons.append(bond_data)
+                except ValueError as e:
+                    st.warning(f"Nie udało się wygenerować danych kuponowych dla obligacji {bond.nazwa}: {e}")
+
+            # Połącz wszystkie dane w jeden DataFrame
+            if all_coupons:
+                coupon_data = pd.concat(all_coupons, ignore_index = True)
+                coupon_data["Data"] = pd.to_datetime(
+                    coupon_data["Data"])  # Upewnij się, że kolumna Data jest w formacie datetime
+
+
+                # Dodanie kolumny "Miesiąc" i grupowanie danych
+                coupon_data["Miesiąc"] = coupon_data["Data"].dt.to_period("M").dt.to_timestamp()
+                # Grupowanie danych według "Miesiąc" i "Obligacja", sumowanie tylko kolumny "Wartość kuponu"
+                grouped_coupons = coupon_data.groupby(["Miesiąc", "Obligacja"], as_index = False)[
+                    "Wartość kuponu"].sum()
+
+                # Tworzenie wykresu skumulowanego słupkowego
+                fig = px.bar(
+                    grouped_coupons,
+                    x = "Miesiąc",
+                    y = "Wartość kuponu",
+                    color = "Obligacja",
+                    title = "Skumulowane wartości kuponów według miesięcy",
+                    labels = {"Miesiąc": "Miesiąc", "Wartość kuponu": "Wartość kuponu (PLN)",
+                              "Obligacja": "Nazwa obligacji"},
+                    barmode = "stack"  # Skumulowane słupki
+                )
+                fig.update_layout(
+                    title_font = dict(family = "Poppins", size = 18),
+                    font = dict(family = "Poppins", size = 14),
+                    legend = dict(bgcolor = "rgba(0,0,0,0)")
+                )
+                st.plotly_chart(fig)
+            else:
+                st.warning("Brak danych kuponowych dla obligacji w portfelu.")
+
             col1, col2, col3 = st.columns([1,1,1])
-
-            with col1:
-                # Średnie oprocentowanie
-                avg_interest = myportfolio.average_interest_rate()
-                st.metric(f"Średnie oprocentowanie portfela", avg_interest)
-
-            with col2:
-                # Całkowita wartość portfela
-                total_value = myportfolio.total_value()
-                st.metric(f"Całkowita wartość portfela", total_value)
 
             with col3:
                 # Rozkład dat zapadalności obligacji
@@ -551,31 +658,5 @@ if not st.session_state['bonds_df'].empty:
 
             with col2:
                 st.plotly_chart(fig_activity)
-
-
-            diversification_result = myportfolio.evaluate_diversification()
-
-            # Pobranie wartości według kluczy
-            liczba_emitentow = diversification_result["Liczba emitentów"]
-            liczba_sektorow = diversification_result["Liczba sektorów"]
-            najwiekszy_udzial = diversification_result["Największy udział obligacji (%)"]
-            liczba_typow_oprocentowania = diversification_result["Różnorodność typów oprocentowania"]
-            ocena_dywersyfikacji = diversification_result["Ocena dywersyfikacji (1-5)"]
-
-            # Wyświetlenie metryk w Streamlit
-            st.subheader("Ocena dywersyfikacji portfela obligacji")
-            st.metric("Liczba emitentów", liczba_emitentow)
-            st.metric("Liczba sektorów", liczba_sektorow)
-            st.metric("Największy udział obligacji (%)", f"{najwiekszy_udzial:.2f}%")
-            st.metric("Różnorodność typów oprocentowania", liczba_typow_oprocentowania)
-            st.metric("Ocena dywersyfikacji (1-5)", ocena_dywersyfikacji)
-
-            if najwiekszy_udzial > 15:
-                st.warning("Zbyt duży udział jednej obligacji! Rozważ dodanie obligacji innych emitentów.")
-            if liczba_sektorow < 3:
-                st.warning("Zbyt mała różnorodność sektorów. Poszukaj obligacji z innych branż.")
-            if liczba_typow_oprocentowania < 2:
-                st.warning("Rozważ dywersyfikację typów oprocentowania, np. dodanie obligacji o stałym oprocentowaniu.")
-
         else:
             st.warning("Twój portfel jest pusty. Dodaj obligacje, aby zobaczyć analizę.")
