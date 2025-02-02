@@ -59,6 +59,7 @@ class Bond:
         self.model_of_forecast = model_of_forecast
         self.reference_rate_model = reference_rate_model
 
+    @log_execution
     def years_to_maturity(self, current_date):
         """Oblicza liczbę lat do zapadalności."""
         from datetime import datetime
@@ -78,13 +79,15 @@ class Bond:
         payments_per_year = self.payments_per_year
 
         coupon_dates = []
-        current_date = maturity_date
+        # Ustalamy datę początkową na datę zapadalności minus okres płatności
+        current_date = maturity_date - relativedelta(
+            months = 12 // payments_per_year)  # Pierwsza płatność przed zapadalnością
 
         total_payments = int(self.years_to_maturity(datetime.today().date()) * payments_per_year)
 
         for _ in range(total_payments):
             coupon_dates.append(current_date)
-            current_date -= relativedelta(months = int(12 / payments_per_year))
+            current_date += relativedelta(months = int(12 / payments_per_year))
 
         return sorted(coupon_dates)
 
@@ -143,8 +146,6 @@ class FixedRateBond(Bond):
         """
         Oblicza YTM netto (po uwzględnieniu podatku) dla obligacji stałoprocentowej.
 
-        :param max_iterations:
-        :param tolerance:
         :param purchase_price: Cena zakupu obligacji.
         :param tax_rate: Stawka podatkowa (domyślnie 19%).
         :return: YTM netto w procentach.
@@ -152,7 +153,7 @@ class FixedRateBond(Bond):
         from scipy.optimize import newton
 
         coupon = self.calculate_coupon()  # Kupon dla jednego okresu
-        coupon = coupon * (1 - tax_rate)
+        coupon = coupon * (1 - tax_rate)  # Zastosowanie podatku do kuponu
         if coupon is None:
             raise ValueError("Kupon nie został poprawnie obliczony.")
 
@@ -183,7 +184,7 @@ class FixedRateBond(Bond):
         except RuntimeError:
             raise ValueError("Metoda Newtona nie znalazła rozwiązania.")
 
-        return round(annual_ytm * 100, 2)  # Zwrot jako procent z dwoma miejscami po przecinku
+        return round(annual_ytm * 100, 2)
 
     @log_execution
     def ekwivalent_ytm_brutto(self, purchase_price, tax_rate = 0.19):
@@ -420,27 +421,6 @@ class BondPortfolio:
         return round(weighted_rate / total_value, 2) if total_value > 0 else 0
 
     @log_execution
-    def bond_summary(self):
-        """Zwróć rozszerzone podsumowanie obligacji w portfelu."""
-        summary = []
-        for bond, transactions in self.bonds.items():
-            for quantity, purchase_price in transactions:
-                total_value = quantity * bond.nominal_value
-                total_purchase_value = quantity * purchase_price  # Całkowita wartość nabycia obligacji
-                summary.append({
-                    "Name": bond.nazwa,
-                    "Quantity": quantity,
-                    "Nominal Value": bond.nominal_value,
-                    "Purchase Price": purchase_price,  # Cena nabycia
-                    "Total Value (Nominal)": total_value,  # Całkowita wartość nominalna
-                    "Total Purchase Value": total_purchase_value,  # Całkowita wartość nabycia
-                    "Interest Type": bond.interest_type,  # Typ oprocentowania
-                    "Model of Forecast": bond.model_of_forecast if bond.interest_type == "zmienne" else "-",
-                    # Model prognozy, np. WIBOR6M
-                })
-        return summary
-
-
     def compare_bond_values(self, bond, purchase_price, quantity):
         """Porównuje wartość obligacji w momencie zakupu i obecnie."""
         bond = next((b for b in self.bonds if b.nazwa == bond.nazwa), None)
@@ -455,25 +435,6 @@ class BondPortfolio:
             "wartość_aktualna": current_value,
             "różnica": current_value - purchase_value
         }
-
-    @log_execution
-    def bond_performance_analysis(self):
-        """Analizuje wydajność obligacji w porównaniu do ich cen zakupu."""
-        performance_data = []
-        for bond, transactions in self.bonds.items():
-            for quantity, purchase_price in transactions:
-
-                current_value = bond.kurs_odniesienia * bond.nominal_value * quantity / 100
-                purchase_value = purchase_price * bond.nominal_value * quantity / 100
-                roi = ((current_value - purchase_value) / purchase_value) * 100
-                performance_data.append({
-                    "Name": bond.nazwa,
-                    "Quantity": quantity,
-                    "Purchase Value": purchase_value,
-                    "Current Value": current_value,
-                    "ROI (%)": roi
-                })
-        return performance_data
 
     @log_execution
     def evaluate_diversification(self):
@@ -492,7 +453,7 @@ class BondPortfolio:
         total_value = self.total_value()
         emitents = set()  # Unikalne spółki emitujące obligacje
         sectors = set()  # Typy działalności spółek
-        interest_types = {"stałe": 0, "zmienne (WIBOR3M)": 0, "zmienne (WIBOR6M)": 0}
+        interest_types = set()  # Unikalne typy oprocentowania
         bond_contributions = {}  # Udział poszczególnych obligacji w całym portfelu
 
         for bond, transactions in self.bonds.items():
@@ -501,19 +462,14 @@ class BondPortfolio:
             emitents.add(bond.emitent)
             sectors.add(bond.typ_dzialalnosci)
 
-            # Liczenie typów oprocentowania
-            if bond.interest_type == "stałe":
-                interest_types["stałe"] += bond_value
-            elif bond.interest_type == "zmienne (WIBOR3M)":
-                interest_types["zmienne (WIBOR3M)"] += bond_value
-            elif bond.interest_type == "zmienne (WIBOR6M)":
-                interest_types["zmienne (WIBOR6M)"] += bond_value
+            # Liczenie unikalnych typów oprocentowania
+            interest_types.add(bond.interest_type)
 
         # Obliczanie wskaźników
         num_emitents = len(emitents)
         num_sectors = len(sectors)
         max_bond_contribution = max(bond_contributions.values()) * 100  # Największa obligacja jako % portfela
-        interest_type_diversification = len([t for t, v in interest_types.items() if v > 0])
+        interest_type_diversification = len(interest_types)  # Liczymy unikalne typy oprocentowania
 
         # Ocena dywersyfikacji
         diversification_score = 1
@@ -535,6 +491,73 @@ class BondPortfolio:
             "Ocena dywersyfikacji (1-5)": diversification_score,
         }
         return summary
+
+    @log_execution
+    def rank_bonds(self, criterion = "ytm", reverse = True):
+        """
+        Tworzy ranking obligacji na podstawie określonego kryterium.
+
+        :param criterion: Kryterium rankingu, np. 'ytm' (Yield to Maturity), 'current_interest', 'maturity_date'.
+        :param reverse: Jeśli True, sortuje malejąco (najlepsze na górze).
+        :return: Posortowana lista słowników zawierających szczegóły obligacji.
+        """
+        ranking = []
+        for bond, transactions in self.bonds.items():
+            for quantity, purchase_price in transactions:
+                bond_data = {
+                    "Nazwa": bond.nazwa,
+                    "Emitent": bond.emitent,
+                    "Wartość nominalna": bond.nominal_value,
+                    "Ilość": quantity,
+                    "Cena zakupu": purchase_price,
+                    "Typ oprocentowania": bond.interest_type,
+                    "YTM (%)": bond.ytm_brutto(purchase_price) if hasattr(bond, "ytm_brutto") else None,
+                    "Obecne oprocentowanie (%)": bond.current_interest,
+                    "Data zapadalności": bond.maturity_date
+                }
+                ranking.append(bond_data)
+
+        # Sortowanie według wybranego kryterium
+        ranking = sorted(ranking, key = lambda x: x.get(criterion), reverse = reverse)
+        return ranking
+
+    @log_execution
+    def generate_alerts(self):
+        """
+        Generuje alerty dla obligacji w portfelu:
+        - Jeśli termin wykupu obligacji jest bliski (miesiąc przed datą zapadalności).
+        - Jeśli zbliża się termin wypłaty kuponu (miesiąc przed datą wypłaty).
+
+        :return: Lista alertów.
+        """
+        alerts = []
+        current_date = datetime.today().date()
+        days_to_maturity = 30
+        days_to_coupon = 30
+
+        for bond, transactions in self.bonds.items():
+            # Sprawdzenie terminu zapadalności
+            if bond.maturity_date:
+                days_to_maturity_left = (bond.maturity_date - current_date).days
+                if days_to_maturity_left <= days_to_maturity:
+                    alerts.append(
+                        f"Obligacja '{bond.nazwa}' zapada za {days_to_maturity_left} dni (termin: {bond.maturity_date})."
+                    )
+
+            # Sprawdzenie terminów kuponów
+            if hasattr(bond, "generate_coupon_dates") and callable(bond.generate_coupon_dates):
+                try:
+                    coupon_dates = bond.generate_coupon_dates()
+                    for date in coupon_dates:
+                        days_to_coupon_left = (date - current_date).days
+                        if 0 < days_to_coupon_left <= days_to_coupon:
+                            alerts.append(
+                                f"Zbliża się termin wypłaty kuponu dla '{bond.nazwa}' za {days_to_coupon_left} dni (termin: {date})."
+                            )
+                except ValueError:
+                    alerts.append(f"Nie można obliczyć dat kuponowych dla obligacji '{bond.nazwa}'.")
+
+        return alerts
 
     @log_execution
     def load_from_xlsx(self, file_name):

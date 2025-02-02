@@ -1,5 +1,8 @@
 import unittest
 from unittest.mock import patch, MagicMock
+
+import requests
+
 from bond_scraper import BondScraper
 
 class TestBondScraper(unittest.TestCase):
@@ -65,6 +68,23 @@ class TestBondScraper(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 self.scraper.fetch_bonds()
+
+    @patch("bond_scraper.requests.get")
+    def test_fetch_bonds_server_error(self, mock_get):
+        """Testuje przypadek, gdy serwer zwraca błąd."""
+        mock_get.side_effect = requests.exceptions.RequestException("Server error")
+        with self.assertRaises(requests.exceptions.RequestException):
+            self.scraper.fetch_bonds()
+
+    @patch("bond_scraper.webdriver.Chrome")
+    def test_scrape_details_no_table(self, mock_chrome):
+        """Testuje brak tabeli szczegółów na stronie."""
+        mock_driver = MagicMock()
+        mock_chrome.return_value = mock_driver
+        mock_driver.page_source = "<html><body>No details here</body></html>"
+
+        result = self.scraper.scrape_details("Bond A")
+        self.assertIsNone(result)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,4 @@
 # created by virtualenv automatically
-*.csv
  __pycache__/
  venv/
  .idea/

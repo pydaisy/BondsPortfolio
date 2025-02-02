@@ -420,9 +420,9 @@ if not st.session_state['bonds_df'].empty:
             with col42:
                 st.metric("Różnorodność typów oprocentowania", liczba_typow_oprocentowania)
             with col52:
-                st.metric(f"Średnie oprocentowanie portfela", avg_interest)
+                st.metric("Średnie oprocentowanie portfela", avg_interest)
             with col62:
-                st.metric(f"Całkowita wartość portfela", total_value)
+                st.metric("Całkowita wartość portfela", total_value)
 
             if ocena_dywersyfikacji < 3:
                 color = "#fa5568"
@@ -457,6 +457,10 @@ if not st.session_state['bonds_df'].empty:
                         st.write(f"Oprocentowanie: {bond.current_interest}% ({bond.interest_type})")
                         st.write(f"Data zapadalności: {bond.maturity_date}")
                         st.write(f"Wartość nominalna: {bond.nominal_value}")
+                        st.write(f"Cena nabycia: {bond.purchase_price}")
+                        st.write(f"Ilość obligacji: {bond.quantity}")
+                        st.write(f"Wartość nabycia: {bond.quantity*bond.purchase_price*bond.nominal_value/100}")
+                        st.metric("Obecna cena rynkowa:", bond.quantity*bond.kurs_odniesienia*bond.nominal_value/100, delta=bond.quantity*bond.kurs_odniesienia*bond.nominal_value/100 - bond.quantity*bond.purchase_price*bond.nominal_value/100)
 
             with col2:
 
@@ -485,178 +489,174 @@ if not st.session_state['bonds_df'].empty:
                     st.error(f"Nie udało się wygenerować rankingu: {e}")
 
 
+                all_coupons = []  # Lista na dane kuponowe
+                for bond in myportfolio.bonds:
+                    try:
+                        # Pobierz daty kuponów i ich wartości
+                        coupon_dates = bond.generate_coupon_dates()
+                        coupon_values = [bond.calculate_coupon()] * len(coupon_dates)
+
+                        # Tworzenie DataFrame dla obligacji
+                        bond_data = pd.DataFrame({
+                            "Data": coupon_dates,
+                            "Wartość kuponu": coupon_values,
+                            "Obligacja": bond.nazwa
+                        })
+                        all_coupons.append(bond_data)
+                    except ValueError as e:
+                        st.warning(f"Nie udało się wygenerować danych kuponowych dla obligacji {bond.nazwa}: {e}")
+
+                # Połącz wszystkie dane w jeden DataFrame
+                if all_coupons:
+                    coupon_data = pd.concat(all_coupons, ignore_index = True)
+                    coupon_data["Data"] = pd.to_datetime(
+                        coupon_data["Data"])  # Upewnij się, że kolumna Data jest w formacie datetime
+
+                    # Dodanie kolumny "Miesiąc" i grupowanie danych
+                    coupon_data["Miesiąc"] = coupon_data["Data"].dt.to_period("M").dt.to_timestamp()
+                    # Grupowanie danych według "Miesiąc" i "Obligacja", sumowanie tylko kolumny "Wartość kuponu"
+                    grouped_coupons = coupon_data.groupby(["Miesiąc", "Obligacja"], as_index = False)[
+                        "Wartość kuponu"].sum()
+
+                    # Tworzenie wykresu skumulowanego słupkowego
+                    fig = px.bar(
+                        grouped_coupons,
+                        x = "Miesiąc",
+                        y = "Wartość kuponu",
+                        color = "Obligacja",
+                        title = "Skumulowane wartości kuponów według miesięcy",
+                        labels = {"Miesiąc": "Miesiąc", "Wartość kuponu": "Wartość kuponu (PLN)",
+                                  "Obligacja": "Nazwa obligacji"},
+                        barmode = "stack"  # Skumulowane słupki
+                    )
+                    fig.update_layout(
+                        title_font = dict(family = "Poppins", size = 18),
+                        font = dict(family = "Poppins", size = 14),
+                        legend = dict(bgcolor = "rgba(0,0,0,0)")
+                    )
+                    st.plotly_chart(fig)
+                else:
+                    st.warning("Brak danych kuponowych dla obligacji w portfelu.")
 
 
-            # Tworzenie listy dla interest_type i model_of_forecast na podstawie liczby obligacji w portfelu
-            data = []
-            for bond in myportfolio.bonds:
-                total_bonds = myportfolio.get_total_bonds(bond)  # Uzyskujemy liczbę obligacji z portfela
-                for _ in range(total_bonds):  # Dodajemy każdą obligację tyle razy, ile jej w portfelu
-                    data.append({
-                        "interest_type": bond.interest_type,
-                        "model_of_forecast": bond.model_of_forecast if bond.interest_type == "zmienne" else ""
-                    })
-
-            # Konwersja do DataFrame
-            df = pd.DataFrame(data)
-
-            # Mapa kolorów
-            color_palette = generate_color_palette()['small_palette']
-
-            # Wykres sunburst
-            fig_sunburst = px.sunburst(
-                df,
-                path=["interest_type", "model_of_forecast"],
-                title="Struktura portfela według typu oprocentowania i modelu prognozy",
-                color="interest_type",
-                color_discrete_sequence=color_palette,  # Użycie mapy kolorów
-            )
-
-            # Ustawienia czcionki i transparentne tło legendy
-            fig_sunburst.update_layout(
-                title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
-                font=dict(family="Poppins", size=14),  # Czcionka wykresów
-                legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
-            )
-
-            fig_sunburst.update_traces(
-                hovertemplate="<b>Oprocentowanie %{id}</b><br>Liczba obligacji:%{value}<br>Procentowy udział w portfelu: %{percentEntry}<br>",
-                hoverlabel=dict(font_size=12, font_family="Poppins")
-            )
-
-            # Wykres działalności
-            activity_types = [bond.typ_dzialalnosci for bond in myportfolio.bonds for _ in range(myportfolio.get_total_bonds(bond))]  # Uwzględniamy wolumen
-            activity_counts = pd.Series(activity_types).value_counts()
-
-            # Procentowy podział według typu działalności
-            fig_activity = px.pie(
-                names=activity_counts.index,
-                values=activity_counts.values,
-                title="Podział portfela według typu działalności",
-                hole=0.5,
-                color_discrete_sequence=color_palette  # Użycie mapy kolorów
-            )
-
-            # Ustawienia czcionki i transparentne tło legendy
-            fig_activity.update_layout(
-                title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
-                font=dict(family="Poppins", size=14),  # Czcionka wykresów
-                legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
-            )
-
-            fig_activity.update_traces(
-                hovertemplate="<b>%{label}</b><br>Liczba obligacji: %{value}</br>",
-                hoverlabel=dict(font_size=12, font_family="Poppins")
-            )
-
-            # Rozkład dat zapadalności
-            maturity_dates = [
-                bond.maturity_date for bond in myportfolio.bonds
-                for _ in range(myportfolio.get_total_bonds(bond))
-            ]  # Lista dat zapadalności uwzględniająca wolumen
-
-            # Rodzaj oprocentowania (stałe/zmienne)
-            interest_types = [
-                bond.interest_type for bond in myportfolio.bonds
-                for _ in range(myportfolio.get_total_bonds(bond))
-            ]  # Uwzględnienie rodzaju oprocentowania dla każdej obligacji
-
-            # Konwersja na DataFrame i dodanie roku zapadalności oraz rodzaju oprocentowania
-            maturity_df = pd.DataFrame({
-                'Data zapadalności': pd.to_datetime(maturity_dates),
-                'Rodzaj oprocentowania': interest_types
-            })
-            maturity_df['Rok zapadalności'] = maturity_df['Data zapadalności'].dt.year
-
-            # Dynamiczny histogram z interwałami czasowymi i podziałem na rodzaj oprocentowania
-            fig_maturity = px.histogram(
-                maturity_df,
-                x = 'Data zapadalności',
-                color = 'Rodzaj oprocentowania',  # Podział na stałe i zmienne oprocentowanie
-                title = "Rozkład dat zapadalności obligacji",
-                labels = {'x': 'Data zapadalności', 'y': 'Liczba obligacji'},
-                color_discrete_map = {'stałe': generate_color_palette()['middle'], 'zmienne': generate_color_palette()['title']},  # Przypisanie kolorów
-                nbins = 20  # Liczba binów do podziału na przedziały
-            )
-
-            # Dostosowanie wykresu
-            fig_maturity.update_layout(
-                title_font = dict(family = "Poppins", size = 18),  # Czcionka dla tytułu
-                font = dict(family = "Poppins", size = 14),  # Czcionka wykresów
-                xaxis_title = "Data zapadalności",
-                yaxis_title = "Liczba obligacji",
-                legend = dict(bgcolor = "rgba(0,0,0,0)")  # Przezroczyste tło legendy
-            )
-
-            # Dodanie tekstu dla zakresów
-            fig_maturity.update_traces(
-                hovertemplate="<b>Data zapadalności:</b> %{x|%Y-%m-%d}<br><b>Liczba obligacji:</b> %{y}<br><b>Rodzaj oprocentowania:</b> %{color}"
-            )
 
 
-            all_coupons = []  # Lista na dane kuponowe
-            for bond in myportfolio.bonds:
-                try:
-                    # Pobierz daty kuponów i ich wartości
-                    coupon_dates = bond.generate_coupon_dates()
-                    coupon_values = [bond.calculate_coupon()] * len(coupon_dates)
+                # Tworzenie listy dla interest_type i model_of_forecast na podstawie liczby obligacji w portfelu
+                data = []
+                for bond in myportfolio.bonds:
+                    total_bonds = myportfolio.get_total_bonds(bond)  # Uzyskujemy liczbę obligacji z portfela
+                    for _ in range(total_bonds):  # Dodajemy każdą obligację tyle razy, ile jej w portfelu
+                        data.append({
+                            "interest_type": bond.interest_type,
+                            "model_of_forecast": bond.model_of_forecast if bond.interest_type == "zmienne" else ""
+                        })
 
-                    # Tworzenie DataFrame dla obligacji
-                    bond_data = pd.DataFrame({
-                        "Data": coupon_dates,
-                        "Wartość kuponu": coupon_values,
-                        "Obligacja": bond.nazwa
-                    })
-                    all_coupons.append(bond_data)
-                except ValueError as e:
-                    st.warning(f"Nie udało się wygenerować danych kuponowych dla obligacji {bond.nazwa}: {e}")
+                # Konwersja do DataFrame
+                df = pd.DataFrame(data)
 
-            # Połącz wszystkie dane w jeden DataFrame
-            if all_coupons:
-                coupon_data = pd.concat(all_coupons, ignore_index = True)
-                coupon_data["Data"] = pd.to_datetime(
-                    coupon_data["Data"])  # Upewnij się, że kolumna Data jest w formacie datetime
+                # Mapa kolorów
+                color_palette = generate_color_palette()['small_palette']
 
-
-                # Dodanie kolumny "Miesiąc" i grupowanie danych
-                coupon_data["Miesiąc"] = coupon_data["Data"].dt.to_period("M").dt.to_timestamp()
-                # Grupowanie danych według "Miesiąc" i "Obligacja", sumowanie tylko kolumny "Wartość kuponu"
-                grouped_coupons = coupon_data.groupby(["Miesiąc", "Obligacja"], as_index = False)[
-                    "Wartość kuponu"].sum()
-
-                # Tworzenie wykresu skumulowanego słupkowego
-                fig = px.bar(
-                    grouped_coupons,
-                    x = "Miesiąc",
-                    y = "Wartość kuponu",
-                    color = "Obligacja",
-                    title = "Skumulowane wartości kuponów według miesięcy",
-                    labels = {"Miesiąc": "Miesiąc", "Wartość kuponu": "Wartość kuponu (PLN)",
-                              "Obligacja": "Nazwa obligacji"},
-                    barmode = "stack"  # Skumulowane słupki
+                # Wykres sunburst
+                fig_sunburst = px.sunburst(
+                    df,
+                    path=["interest_type", "model_of_forecast"],
+                    title="Struktura portfela według typu oprocentowania i modelu prognozy",
+                    color="interest_type",
+                    color_discrete_sequence=color_palette,  # Użycie mapy kolorów
                 )
-                fig.update_layout(
-                    title_font = dict(family = "Poppins", size = 18),
-                    font = dict(family = "Poppins", size = 14),
-                    legend = dict(bgcolor = "rgba(0,0,0,0)")
+
+                # Ustawienia czcionki i transparentne tło legendy
+                fig_sunburst.update_layout(
+                    title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
+                    font=dict(family="Poppins", size=14),  # Czcionka wykresów
+                    legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
                 )
-                st.plotly_chart(fig)
-            else:
-                st.warning("Brak danych kuponowych dla obligacji w portfelu.")
 
-            col1, col2, col3 = st.columns([1,1,1])
+                fig_sunburst.update_traces(
+                    hovertemplate="<b>Oprocentowanie %{id}</b><br>Liczba obligacji:%{value}<br>Procentowy udział w portfelu: %{percentEntry}<br>",
+                    hoverlabel=dict(font_size=12, font_family="Poppins")
+                )
 
-            with col3:
+                # Wykres działalności
+                activity_types = [bond.typ_dzialalnosci for bond in myportfolio.bonds for _ in range(myportfolio.get_total_bonds(bond))]  # Uwzględniamy wolumen
+                activity_counts = pd.Series(activity_types).value_counts()
+
+                # Procentowy podział według typu działalności
+                fig_activity = px.pie(
+                    names=activity_counts.index,
+                    values=activity_counts.values,
+                    title="Podział portfela według typu działalności",
+                    hole=0.5,
+                    color_discrete_sequence=color_palette  # Użycie mapy kolorów
+                )
+
+                # Ustawienia czcionki i transparentne tło legendy
+                fig_activity.update_layout(
+                    title_font=dict(family="Poppins", size=18),  # Czcionka dla tytułów
+                    font=dict(family="Poppins", size=14),  # Czcionka wykresów
+                    legend=dict(bgcolor="rgba(0,0,0,0)")  # Przezroczyste tło legendy
+                )
+
+                fig_activity.update_traces(
+                    hovertemplate="<b>%{label}</b><br>Liczba obligacji: %{value}</br>",
+                    hoverlabel=dict(font_size=12, font_family="Poppins")
+                )
+
+                # Rozkład dat zapadalności
+                maturity_dates = [
+                    bond.maturity_date for bond in myportfolio.bonds
+                    for _ in range(myportfolio.get_total_bonds(bond))
+                ]  # Lista dat zapadalności uwzględniająca wolumen
+
+                # Rodzaj oprocentowania (stałe/zmienne)
+                interest_types = [
+                    bond.interest_type for bond in myportfolio.bonds
+                    for _ in range(myportfolio.get_total_bonds(bond))
+                ]  # Uwzględnienie rodzaju oprocentowania dla każdej obligacji
+
+                # Konwersja na DataFrame i dodanie roku zapadalności oraz rodzaju oprocentowania
+                maturity_df = pd.DataFrame({
+                    'Data zapadalności': pd.to_datetime(maturity_dates),
+                    'Rodzaj oprocentowania': interest_types
+                })
+                maturity_df['Rok zapadalności'] = maturity_df['Data zapadalności'].dt.year
+
+                # Dynamiczny histogram z interwałami czasowymi i podziałem na rodzaj oprocentowania
+                fig_maturity = px.histogram(
+                    maturity_df,
+                    x = 'Data zapadalności',
+                    color = 'Rodzaj oprocentowania',  # Podział na stałe i zmienne oprocentowanie
+                    title = "Rozkład dat zapadalności obligacji",
+                    labels = {'x': 'Data zapadalności', 'y': 'Liczba obligacji'},
+                    color_discrete_map = {'stałe': generate_color_palette()['middle'], 'zmienne': generate_color_palette()['title']},  # Przypisanie kolorów
+                    nbins = 20  # Liczba binów do podziału na przedziały
+                )
+
+                # Dostosowanie wykresu
+                fig_maturity.update_layout(
+                    title_font = dict(family = "Poppins", size = 18),  # Czcionka dla tytułu
+                    font = dict(family = "Poppins", size = 14),  # Czcionka wykresów
+                    xaxis_title = "Data zapadalności",
+                    yaxis_title = "Liczba obligacji",
+                    legend = dict(bgcolor = "rgba(0,0,0,0)")  # Przezroczyste tło legendy
+                )
+
+                # Dodanie tekstu dla zakresów
+                fig_maturity.update_traces(
+                    hovertemplate="<b>Data zapadalności:</b> %{x|%Y-%m-%d}<br><b>Liczba obligacji:</b> %{y}<br>"
+                )
+
+                # Wyświetlenie wykresów w układzie obok siebie
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.plotly_chart(fig_sunburst)
+
+                with col2:
+                    st.plotly_chart(fig_activity)
+
                 # Rozkład dat zapadalności obligacji
                 st.plotly_chart(fig_maturity)
-
-            # Wyświetlenie wykresów w układzie obok siebie
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.plotly_chart(fig_sunburst)
-
-            with col2:
-                st.plotly_chart(fig_activity)
         else:
             st.warning("Twój portfel jest pusty. Dodaj obligacje, aby zobaczyć analizę.")
